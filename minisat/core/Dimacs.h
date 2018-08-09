@@ -58,6 +58,7 @@ static void parse_DIMACS_main(B& in, Solver& S, bool strictp = false) {
             if (eagerMatch(in, "p cnf")){
                 vars    = parseInt(in);
                 clauses = parseInt(in);
+                S.reserveVars(vars);
                 // SATRACE'06 hack
                 // if (clauses > 4000000)
                 //     S.eliminate(true);
@@ -73,6 +74,7 @@ static void parse_DIMACS_main(B& in, Solver& S, bool strictp = false) {
     }
     if (strictp && cnt != clauses)
         printf("c PARSE ERROR! DIMACS header mismatch: wrong number of clauses\n");
+    while(vars > S.nVars()) S.newVar();
 }
 
 // Inserts problem into solver.
