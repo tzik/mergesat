@@ -217,6 +217,7 @@ Solver::Solver()
   , VSIDS_propagations(opt_vsids_p)
   , reactivate_VSIDS(false)
 
+  , CBT(false)
   , ok(true)
   , cla_inc(1)
   , var_inc(1)
@@ -1982,10 +1983,12 @@ lbool Solver::search(int &nof_conflicts)
             if ((confl_to_chrono < 0 || confl_to_chrono <= (int64_t)conflicts) && chrono > -1 &&
                 (decisionLevel() - backtrack_level) >= chrono) {
                 ++chrono_backtrack;
+                CBT = true;
                 cancelUntil(data.nHighestLevel - 1);
             } else // default behavior
             {
                 ++non_chrono_backtrack;
+                CBT = false;
                 cancelUntil(backtrack_level);
             }
 
