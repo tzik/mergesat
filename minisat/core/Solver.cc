@@ -1116,8 +1116,8 @@ void Solver::analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, int &ou
             if (!seen[var(q)] && level(var(q)) > 0) {
                 if (VSIDS) {
                     varBumpActivity(var(q), .5);
-                    litBumpActivity(~q, .5);
-                    // add_tmp.push(q);
+                    if(use_lsids) litBumpActivity(~q, .5);
+                    else add_tmp.push(q);
                 } else
                     conflicted[var(q)]++;
                 seen[var(q)] = 1;
@@ -1207,13 +1207,15 @@ void Solver::analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, int &ou
         }
         add_tmp.clear();
     } else {
-        for (int i = 0; i < add_tmp.size(); i++) {
-            Var v = var(add_tmp[i]);
-            if (level(v) >= out_btlevel - 1) {
-                litBumpActivity(~add_tmp[i], 1);
+        if(use_lsids) {
+            for (int i = 0; i < add_tmp.size(); i++) {
+                Var v = var(add_tmp[i]);
+                if (level(v) >= out_btlevel - 1) {
+                    litBumpActivity(~add_tmp[i], 1);
+                }
             }
+            add_tmp.clear();
         }
-        add_tmp.clear();
 
         seen[var(p)] = true;
         for (int i = out_learnt.size() - 1; i >= 0; i--) {
