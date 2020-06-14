@@ -236,7 +236,7 @@ class Solver
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts, conflicts_VSIDS;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
     uint64_t chrono_backtrack, non_chrono_backtrack;
-    bool CBT;
+    bool CBT, use_lsids;
 
     vec<uint32_t> picked;
     vec<uint32_t> conflicted;

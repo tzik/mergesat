@@ -120,6 +120,7 @@ static DoubleOption opt_lsids_phase(cat2,
                                     0.5,
                                     DoubleRange(0, true, 1, true));
 static DoubleOption opt_lsids_erase_weight(cat2, "lsids-erase-weight", "Weight for LSIDS bump", 2.0, DoubleRange(0, true, 5, true));
+static BoolOption opt_use_lsids(cat2, "lsids", "Use LSIDS as literal polarity heuristic", true);
 
 static DoubleOption opt_inprocessing_inc(_cat,
                                          "inprocess-delay",
@@ -232,6 +233,7 @@ Solver::Solver()
   , reactivate_VSIDS(false)
 
   , CBT(false)
+  , use_lsids(opt_use_lsids)
   , ok(true)
   , cla_inc(1)
   , var_inc(1)
@@ -999,7 +1001,7 @@ Lit Solver::pickBranchLit()
     if (posMissingInSome == 0 || negMissingInSome == 0)
         return posMissingInSome == 0 ? mkLit(next, false) : mkLit(next, true);
 
-    if (CBT) {
+    if (CBT && use_lsids) {
         lit = pickLsidsBasedPhase(next);
         return lit;
     } else {
