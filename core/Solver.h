@@ -80,6 +80,7 @@ class Solver
     void toDimacs(FILE *f, Clause &c, vec<Var> &map, Var &max);
     void printLit(Lit l);
     void printClause(CRef c);
+    void printInitialClause(CRef c);
     // Convenience versions of 'toDimacs()':
     void toDimacs(const char *file);
     void toDimacs(const char *file, Lit p);
@@ -103,6 +104,11 @@ class Solver
     int nVars() const;    // The current number of variables.
     int nFreeVars() const;
 
+    // Incremental mode
+    void setIncrementalMode();
+    void initNbInitialVars(int nb);
+    void printIncrementalStats();
+
     // Resource contraints:
     //
     void setConfBudget(int64_t x);
@@ -117,6 +123,7 @@ class Solver
     void checkGarbage(double gf);
     void checkGarbage();
 
+
     // Extra results: (read-only member variable)
     //
     vec<lbool> model;  // If problem is satisfiable, this vector contains the model (if any).
@@ -127,6 +134,7 @@ class Solver
     //
     int verbosity;
     int verbEveryConflicts;
+    int showModel;
     // Constants For restarts
     double K;
     double R;
@@ -153,11 +161,15 @@ class Solver
     bool rnd_init_act;   // Initialize variable activities with a small random value.
     double garbage_frac; // The fraction of wasted memory allowed before a garbage collection is triggered.
 
+    // Certified UNSAT ( Thanks to Marijn Heule)
+    FILE *certifiedOutput;
+    bool certifiedUNSAT;
+
 
     // Statistics: (read-only member variable)
     //
     uint64_t nbRemovedClauses, nbReducedClauses, nbDL2, nbBin, nbUn, nbReduceDB, solves, starts, decisions,
-    rnd_decisions, propagations, conflicts, nbstopsrestarts, nbstopsrestartssame, lastblockatrestart;
+    rnd_decisions, propagations, conflicts, conflictsRestarts, nbstopsrestarts, nbstopsrestartssame, lastblockatrestart;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
     protected:
@@ -234,6 +246,7 @@ class Solver
 
     bqueue<unsigned int> trailQueue, lbdQueue; // Bounded queues for restarts.
     float sumLBD;                              // used to compute the global average of LBD. Restarts...
+    int sumAssumptions;
 
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
@@ -256,6 +269,15 @@ class Solver
     int64_t propagation_budget; // -1 means no budget.
     bool asynch_interrupt;
 
+
+    // Variables added for incremental mode
+    int incremental;          // Use incremental SAT Solver
+    int nbVarsInitialFormula; // nb VAR in formula without assumptions (incremental SAT)
+    double totalTime4Sat, totalTime4Unsat;
+    int nbSatCalls, nbUnsatCalls;
+    vec<int> assumptionPositions, initialPositions;
+
+
     // Main internal methods:
     //
     void insertVarOrder(Var x);                           // Insert a variable in the decision order priority queue.
@@ -265,7 +287,7 @@ class Solver
     bool enqueue(Lit p, CRef from = CRef_Undef); // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef propagate();                            // Perform unit propagation. Returns possibly conflicting clause.
     void cancelUntil(int level);                 // Backtrack until a certain level.
-    void analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, unsigned int &nblevels); // (bt = backtrack)
+    void analyze(CRef confl, vec<Lit> &out_learnt, vec<Lit> &selectors, int &out_btlevel, unsigned int &nblevels, unsigned int &szWithoutSelectors); // (bt = backtrack)
     void analyzeFinal(Lit p, vec<Lit> &out_conflict); // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool litRedundant(Lit p, uint32_t abstract_levels); // (helper method for 'analyze()')
     lbool search(int nof_conflicts);                    // Search for a given number of conflicts.
@@ -290,6 +312,10 @@ class Solver
     bool locked(const Clause &c) const; // Returns TRUE if a clause is a reason for some implication in the current state.
     bool satisfied(const Clause &c) const; // Returns TRUE if a clause is satisfied in the current state.
 
+    unsigned int computeLBD(const vec<Lit> &lits, int end = -1);
+    unsigned int computeLBD(const Clause &c);
+    void minimisationWithBinaryResolution(vec<Lit> &out_learnt);
+
     void relocAll(ClauseAllocator &to);
 
     // Misc:
@@ -300,6 +326,7 @@ class Solver
     int level(Var x) const;
     double progressEstimate() const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool withinBudget() const;
+    inline bool isSelector(Var v) { return (incremental && v > nbVarsInitialFormula); }
 
     // Static helpers:
     //
@@ -529,6 +556,18 @@ inline void Solver::printClause(CRef cr)
         printf(" ");
     }
 }
+
+inline void Solver::printInitialClause(CRef cr)
+{
+    Clause &c = ca[cr];
+    for (int i = 0; i < c.size(); i++) {
+        if (!isSelector(var(c[i]))) {
+            printLit(c[i]);
+            printf(" ");
+        }
+    }
+}
+
 
 //=================================================================================================
 } // namespace Glucose

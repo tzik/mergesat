@@ -97,7 +97,7 @@ static void SIGINT_exit(int signum)
 
 int main(int argc, char **argv)
 {
-    printf("c\nc This is glucose 2.3 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+    printf("c\nc This is glucose 3.0 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
     try {
         setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain "
                      "or gzipped DIMACS.\n");
@@ -113,9 +113,11 @@ int main(int argc, char **argv)
         // Extra options:
         //
         IntOption verb("MAIN", "verb", "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
+        BoolOption mod("MAIN", "model", "show model.", false);
         IntOption vv("MAIN", "vv", "Verbosity every vv conflicts", 10000, IntRange(1, INT32_MAX));
         IntOption cpu_lim("MAIN", "cpu-lim", "Limit on CPU time allowed in seconds.\n", INT32_MAX, IntRange(0, INT32_MAX));
         IntOption mem_lim("MAIN", "mem-lim", "Limit on memory usage in megabytes.\n", INT32_MAX, IntRange(0, INT32_MAX));
+
 
         parseOptions(argc, argv, true);
 
@@ -124,6 +126,7 @@ int main(int argc, char **argv)
 
         S.verbosity = verb;
         S.verbEveryConflicts = vv;
+        S.showModel = mod;
         solver = &S;
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
@@ -166,7 +169,9 @@ int main(int argc, char **argv)
 
         parse_DIMACS(in, S);
         gzclose(in);
-        FILE *res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
+
+
+        FILE *res = (argc >= 3) ? fopen(argv[argc - 1], "wb") : NULL;
 
         if (S.verbosity > 0) {
             printf("c |  Number of variables:  %12d                                                                   "
@@ -192,6 +197,7 @@ int main(int argc, char **argv)
         // signal(SIGXCPU,SIGINT_interrupt);
 
         if (!S.simplify()) {
+            if (S.certifiedOutput != NULL) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
             if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
             if (S.verbosity > 0) {
                 printf("c "
@@ -211,6 +217,8 @@ int main(int argc, char **argv)
             printStats(S);
             printf("\n");
         }
+
+        //-------------- Result is put in a external file
         if (res != NULL) {
             if (ret == l_True) {
                 fprintf(res, "SAT\n");
@@ -223,9 +231,11 @@ int main(int argc, char **argv)
             else
                 fprintf(res, "INDET\n");
             fclose(res);
+
+            //-------------- Want certified output
         } else {
             printf(ret == l_True ? "s SATISFIABLE\n" : ret == l_False ? "s UNSATISFIABLE\n" : "s INDETERMINATE\n");
-            if (ret == l_True) {
+            if (S.showModel && ret == l_True) {
                 printf("v ");
                 for (int i = 0; i < S.nVars(); i++)
                     if (S.model[i] != l_Undef)
@@ -233,6 +243,7 @@ int main(int argc, char **argv)
                 printf(" 0\n");
             }
         }
+
 
 #ifdef NDEBUG
         exit(ret == l_True ? 10 : ret == l_False ? 20 : 0); // (faster than "return", which will invoke the destructor for 'Solver')

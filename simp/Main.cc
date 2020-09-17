@@ -98,8 +98,9 @@ static void SIGINT_exit(int signum)
 int main(int argc, char **argv)
 {
     try {
-        printf("c\nc This is glucose 2.3 --  based on MiniSAT (Many thanks to MiniSAT team)\nc Simplification mode is "
+        printf("c\nc This is glucose 3.0 --  based on MiniSAT (Many thanks to MiniSAT team)\nc Simplification mode is "
                "turned on\nc\n");
+
         setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain "
                      "or gzipped DIMACS.\n");
 
@@ -109,10 +110,12 @@ int main(int argc, char **argv)
         _FPU_GETCW(oldcw);
         newcw = (oldcw & ~_FPU_EXTENDED) | _FPU_DOUBLE;
         _FPU_SETCW(newcw);
+        printf("WARNING: for repeatability, setting FPU to use double precision\n");
 #endif
         // Extra options:
         //
         IntOption verb("MAIN", "verb", "Verbosity level (0=silent, 1=some, 2=more).", 1, IntRange(0, 2));
+        BoolOption mod("MAIN", "model", "show model.", false);
         IntOption vv("MAIN", "vv", "Verbosity every vv conflicts", 10000, IntRange(1, INT32_MAX));
         BoolOption pre("MAIN", "pre", "Completely turn on/off any preprocessing.", true);
         StringOption dimacs("MAIN", "dimacs", "If given, stop after preprocessing and write the result to this file.");
@@ -124,10 +127,12 @@ int main(int argc, char **argv)
         SimpSolver S;
         double initial_time = cpuTime();
 
+        S.parsing = 1;
         if (!pre) S.eliminate(true);
 
         S.verbosity = verb;
         S.verbEveryConflicts = vv;
+        S.showModel = mod;
         solver = &S;
         // Use signal handlers that forcibly quit until the solver will be able to respond to
         // interrupts:
@@ -167,9 +172,9 @@ int main(int argc, char **argv)
                    "       |\n");
         }
 
+        FILE *res = (argc >= 3) ? fopen(argv[argc - 1], "wb") : NULL;
         parse_DIMACS(in, S);
         gzclose(in);
-        FILE *res = (argc >= 3) ? fopen(argv[2], "wb") : NULL;
 
         if (S.verbosity > 0) {
             printf("c |  Number of variables:  %12d                                                                   "
@@ -194,6 +199,7 @@ int main(int argc, char **argv)
         signal(SIGINT, SIGINT_interrupt);
         signal(SIGXCPU, SIGINT_interrupt);
 
+        S.parsing = 0;
         S.eliminate(true);
         double simplified_time = cpuTime();
         if (S.verbosity > 0) {
@@ -205,12 +211,13 @@ int main(int argc, char **argv)
         }
 
         if (!S.okay()) {
+            if (S.certifiedUNSAT) fprintf(S.certifiedOutput, "0\n"), fclose(S.certifiedOutput);
             if (res != NULL) fprintf(res, "UNSAT\n"), fclose(res);
             if (S.verbosity > 0) {
                 printf("c "
                        "==============================================================================================="
                        "==========\n");
-                printf("c Solved by simplification\n");
+                printf("Solved by simplification\n");
                 printStats(S);
                 printf("\n");
             }
@@ -235,25 +242,28 @@ int main(int argc, char **argv)
             printf("\n");
         }
         printf(ret == l_True ? "s SATISFIABLE\n" : ret == l_False ? "s UNSATISFIABLE\n" : "s INDETERMINATE\n");
-        if (ret == l_True) {
-            printf("v ");
-            for (int i = 0; i < S.nVars(); i++)
-                if (S.model[i] != l_Undef)
-                    printf("%s%s%d", (i == 0) ? "" : " ", (S.model[i] == l_True) ? "" : "-", i + 1);
-            printf(" 0\n");
-        }
+
         if (res != NULL) {
             if (ret == l_True) {
-                fprintf(res, "SAT\n");
+                printf("SAT\n");
                 for (int i = 0; i < S.nVars(); i++)
                     if (S.model[i] != l_Undef)
                         fprintf(res, "%s%s%d", (i == 0) ? "" : " ", (S.model[i] == l_True) ? "" : "-", i + 1);
                 fprintf(res, " 0\n");
-            } else if (ret == l_False)
-                fprintf(res, "UNSAT\n");
-            else
-                fprintf(res, "INDET\n");
+            } else {
+                if (ret == l_False) {
+                    fprintf(res, "UNSAT\n"), fclose(res);
+                }
+            }
             fclose(res);
+        } else {
+            if (S.showModel && ret == l_True) {
+                printf("v ");
+                for (int i = 0; i < S.nVars(); i++)
+                    if (S.model[i] != l_Undef)
+                        printf("%s%s%d", (i == 0) ? "" : " ", (S.model[i] == l_True) ? "" : "-", i + 1);
+                printf(" 0\n");
+            }
         }
 
 #ifdef NDEBUG

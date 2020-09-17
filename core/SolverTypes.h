@@ -110,9 +110,9 @@ const Lit lit_Error = { -1 }; // }
 //       does enough constant propagation to produce sensible code, and this appears to be somewhat
 //       fragile unfortunately.
 
-#define l_True (lbool((uint8_t)0)) // gcc does not do constant propagation if these are real constants.
-#define l_False (lbool((uint8_t)1))
-#define l_Undef (lbool((uint8_t)2))
+#define l_True (Glucose::lbool((uint8_t)0)) // gcc does not do constant propagation if these are real constants.
+#define l_False (Glucose::lbool((uint8_t)1))
+#define l_Undef (Glucose::lbool((uint8_t)2))
 
 class lbool
 {
@@ -164,6 +164,8 @@ class Clause
         unsigned lbd : 26;
         unsigned canbedel : 1;
         unsigned size : 32;
+        unsigned szWithoutSelectors : 32;
+
     } header;
     union {
         Lit lit;
@@ -250,6 +252,8 @@ class Clause
     unsigned int lbd() const { return header.lbd; }
     void setCanBeDel(bool b) { header.canbedel = b; }
     bool canBeDel() { return header.canbedel; }
+    void setSizeWithoutSelectors(unsigned int n) { header.szWithoutSelectors = n; }
+    unsigned int sizeWithoutSelectors() const { return header.szWithoutSelectors; }
 };
 
 
@@ -320,6 +324,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         if (to[cr].learnt()) {
             to[cr].activity() = c.activity();
             to[cr].setLBD(c.lbd());
+            to[cr].setSizeWithoutSelectors(c.sizeWithoutSelectors());
             to[cr].setCanBeDel(c.canBeDel());
         } else if (to[cr].has_extra())
             to[cr].calcAbstraction();
