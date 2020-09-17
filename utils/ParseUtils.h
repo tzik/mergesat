@@ -24,7 +24,11 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _MSC_VER
+#include <win/zlib.h>
+#else
 #include <zlib.h>
+#endif
 
 namespace Minisat
 {
