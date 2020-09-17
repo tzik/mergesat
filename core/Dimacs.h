@@ -18,15 +18,15 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#ifndef Minisat_Dimacs_h
-#define Minisat_Dimacs_h
+#ifndef Glucose_Dimacs_h
+#define Glucose_Dimacs_h
 
 #include <stdio.h>
 
 #include "core/SolverTypes.h"
 #include "utils/ParseUtils.h"
 
-namespace Minisat
+namespace Glucose
 {
 
 //=================================================================================================
@@ -86,6 +86,6 @@ template <class Solver> static void parse_DIMACS(gzFile input_stream, Solver &S)
 }
 
 //=================================================================================================
-} // namespace Minisat
+} // namespace Glucose
 
 #endif

@@ -18,14 +18,14 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 
-#ifndef Minisat_XAlloc_h
-#define Minisat_XAlloc_h
+#ifndef Glucose_XAlloc_h
+#define Glucose_XAlloc_h
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-namespace Minisat
+namespace Glucose
 {
 
 //=================================================================================================
@@ -45,6 +45,6 @@ static inline void *xrealloc(void *ptr, size_t size)
 }
 
 //=================================================================================================
-} // namespace Minisat
+} // namespace Glucose
 
 #endif

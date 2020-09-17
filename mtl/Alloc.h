@@ -18,13 +18,13 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 **************************************************************************************************/
 
 
-#ifndef Minisat_Alloc_h
-#define Minisat_Alloc_h
+#ifndef Glucose_Alloc_h
+#define Glucose_Alloc_h
 
 #include "mtl/Vec.h"
 #include "mtl/XAlloc.h"
 
-namespace Minisat
+namespace Glucose
 {
 
 //=================================================================================================
@@ -141,6 +141,6 @@ template <class T> typename RegionAllocator<T>::Ref RegionAllocator<T>::alloc(in
 
 
 //=================================================================================================
-} // namespace Minisat
+} // namespace Glucose
 
 #endif

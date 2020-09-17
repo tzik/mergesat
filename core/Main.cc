@@ -38,7 +38,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "utils/ParseUtils.h"
 #include "utils/System.h"
 
-using namespace Minisat;
+using namespace Glucose;
 
 //=================================================================================================
 
@@ -48,7 +48,7 @@ void printStats(Solver &solver)
     double cpu_time = cpuTime();
     double mem_used = 0; // memUsedPeak();
     printf("c restarts              : %" PRIu64 " (%" PRIu64 " conflicts in avg)\n", solver.starts,
-           solver.conflicts / solver.starts);
+           (solver.starts > 0 ? solver.conflicts / solver.starts : 0));
     printf("c blocked restarts      : %" PRIu64 " (multiple: %" PRIu64 ") \n", solver.nbstopsrestarts, solver.nbstopsrestartssame);
     printf("c last block at restart : %" PRIu64 "\n", solver.lastblockatrestart);
     printf("c nb ReduceDB           : %lld\n", solver.nbReduceDB);
@@ -97,7 +97,7 @@ static void SIGINT_exit(int signum)
 
 int main(int argc, char **argv)
 {
-    printf("c\nc This is glucose 2.1 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
+    printf("c\nc This is glucose 2.3 --  based on MiniSAT (Many thanks to MiniSAT team)\nc\n");
     try {
         setUsageHelp("c USAGE: %s [options] <input-file> <result-output-file>\n\n  where input may be either in plain "
                      "or gzipped DIMACS.\n");

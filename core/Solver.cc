@@ -33,7 +33,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "core/Solver.h"
 #include "mtl/Sort.h"
 
-using namespace Minisat;
+using namespace Glucose;
 
 //=================================================================================================
 // Options:
@@ -51,7 +51,7 @@ static IntOption
 opt_size_trail_queue(_cr, "szTrailQueue", "The size of moving average for trail (block restarts)", 5000, IntRange(10, INT32_MAX));
 
 static IntOption
-opt_first_reduce_db(_cred, "firstReduceDB", "The number of conflicts before the first reduce DB", 4000, IntRange(0, INT32_MAX));
+opt_first_reduce_db(_cred, "firstReduceDB", "The number of conflicts before the first reduce DB", 2000, IntRange(0, INT32_MAX));
 static IntOption opt_inc_reduce_db(_cred, "incReduceDB", "Increment for reduce DB", 300, IntRange(0, INT32_MAX));
 static IntOption opt_spec_inc_reduce_db(_cred, "specialIncReduceDB", "Special increment for reduce DB", 1000, IntRange(0, INT32_MAX));
 static IntOption opt_lb_lbd_frozen_clause(_cred,
@@ -66,7 +66,7 @@ static IntOption
 opt_lb_lbd_minimzing_clause(_cm, "minLBDMinimizingClause", "The min LBD required to minimize clause", 6, IntRange(3, INT32_MAX));
 
 
-static DoubleOption opt_var_decay(_cat, "var-decay", "The variable activity decay factor", 0.95, DoubleRange(0, false, 1, false));
+static DoubleOption opt_var_decay(_cat, "var-decay", "The variable activity decay factor", 0.8, DoubleRange(0, false, 1, false));
 static DoubleOption opt_clause_decay(_cat, "cla-decay", "The clause activity decay factor", 0.999, DoubleRange(0, false, 1, false));
 static DoubleOption
 opt_random_var_freq(_cat,
@@ -145,6 +145,7 @@ Solver::Solver()
   , learnts_literals(0)
   , max_literals(0)
   , tot_literals(0)
+  , curRestart(1)
 
   , ok(true)
   , cla_inc(1)
@@ -326,10 +327,12 @@ Lit Solver::pickBranchLit()
     Var next = var_Undef;
 
     // Random decision:
-    if (drand(random_seed) < random_var_freq && !order_heap.empty()) {
-        next = order_heap[irand(random_seed, order_heap.size())];
-        if (value(next) == l_Undef && decision[next]) rnd_decisions++;
-    }
+    /*
+    if (drand(random_seed) < random_var_freq && !order_heap.empty()){
+        next = order_heap[irand(random_seed,order_heap.size())];
+        if (value(next) == l_Undef && decision[next])
+            rnd_decisions++; }
+    */
 
     // Activity based decision:
     while (next == var_Undef || value(next) != l_Undef || !decision[next])
@@ -384,6 +387,29 @@ void Solver::analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, unsigne
         }
 
         if (c.learnt()) claBumpActivity(c);
+
+#ifdef DYNAMICNBLEVEL
+        // DYNAMIC NBLEVEL trick (see competition'09 companion paper)
+        if (c.learnt() && c.lbd() > 2) {
+            MYFLAG++;
+            unsigned int nblevels = 0;
+            for (int i = 0; i < c.size(); i++) {
+                int l = level(var(c[i]));
+                if (permDiff[l] != MYFLAG) {
+                    permDiff[l] = MYFLAG;
+                    nblevels++;
+                }
+            }
+            if (nblevels + 1 < c.lbd()) { // improve the LBD
+                if (c.lbd() <= lbLBDFrozenClause) {
+                    c.setCanBeDel(false);
+                }
+                // seems to be interesting : keep it for the next round
+                c.setLBD(nblevels); // Update it
+            }
+        }
+#endif
+
 
         for (int j = (p == lit_Undef) ? 0 : 1; j < c.size(); j++) {
             Lit q = c[j];
@@ -734,28 +760,6 @@ CRef Solver::propagate()
                 while (i < end) *j++ = *i++;
             } else {
                 uncheckedEnqueue(first, cr);
-
-#ifdef DYNAMICNBLEVEL
-                // DYNAMIC NBLEVEL trick (see competition'09 companion paper)
-                if (c.learnt() && c.lbd() > 2) {
-                    MYFLAG++;
-                    unsigned int nblevels = 0;
-                    for (int i = 0; i < c.size(); i++) {
-                        int l = level(var(c[i]));
-                        if (permDiff[l] != MYFLAG) {
-                            permDiff[l] = MYFLAG;
-                            nblevels++;
-                        }
-                    }
-                    if (nblevels + 1 < c.lbd()) { // improve the LBD
-                        if (c.lbd() <= lbLBDFrozenClause) {
-                            c.setCanBeDel(false);
-                        }
-                        // seems to be interesting : keep it for the next round
-                        c.setLBD(nblevels); // Update it
-                    }
-                }
-#endif
             }
         NextClause:;
         }
@@ -843,7 +847,7 @@ void Solver::removeSatisfied(vec<CRef> &cs)
         Clause &c = ca[cs[i]];
 
 
-        if (c.size() > 2 && satisfied(c)) // A bug if we remove size ==2, We need to correct it, but later.
+        if (c.size() >= 2 && satisfied(c)) // A bug if we remove size ==2, We need to correct it, but later.
             removeClause(cs[i]);
         else
             cs[j++] = cs[i];
@@ -904,7 +908,6 @@ bool Solver::simplify()
 |    all variables are decision variables, this means that the clause set is satisfiable. 'l_False'
 |    if the clause set is unsatisfiable. 'l_Undef' if the bound on number of conflicts is reached.
 |________________________________________________________________________________________________@*/
-static long conf4stats = 0, cons = 0, curRestart = 1;
 lbool Solver::search(int nof_conflicts)
 {
     assert(ok);
@@ -920,7 +923,7 @@ lbool Solver::search(int nof_conflicts)
             // CONFLICT
             conflicts++;
             conflictC++;
-
+            if (conflicts % 5000 == 0 && var_decay < 0.95) var_decay += 0.01;
             if (verbosity >= 1 && conflicts % verbEveryConflicts == 0) {
                 printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% |\n", (int)starts,
                        (int)nbstopsrestarts, (int)(conflicts / starts),
@@ -945,8 +948,6 @@ lbool Solver::search(int nof_conflicts)
             learnt_clause.clear();
             analyze(confl, learnt_clause, backtrack_level, nblevels);
 
-            conf4stats++;
-            cons++;
             lbdQueue.push(nblevels);
             sumLBD += nblevels;
 
@@ -961,21 +962,19 @@ lbool Solver::search(int nof_conflicts)
                 ca[cr].setLBD(nblevels);
                 if (nblevels <= 2) nbDL2++;      // stats
                 if (ca[cr].size() == 2) nbBin++; // stats
-
                 learnts.push(cr);
                 attachClause(cr);
 
                 claBumpActivity(ca[cr]);
                 uncheckedEnqueue(learnt_clause[0], cr);
             }
-
             varDecayActivity();
             claDecayActivity();
 
 
         } else {
             // Our dynamic restart, see the SAT09 competition compagnion paper
-            if ((lbdQueue.isvalid() && ((lbdQueue.getavg() * K) > (sumLBD / conf4stats)))) {
+            if ((lbdQueue.isvalid() && ((lbdQueue.getavg() * K) > (sumLBD / conflicts)))) {
                 lbdQueue.fastclear();
                 progress_estimate = progressEstimate();
                 cancelUntil(0);
@@ -989,7 +988,7 @@ lbool Solver::search(int nof_conflicts)
                 return l_False;
             }
             // Perform clause database reduction !
-            if (cons - curRestart * nbclausesbeforereduce >= 0) {
+            if (conflicts >= curRestart * nbclausesbeforereduce) {
 
                 assert(learnts.size() > 0);
                 curRestart = (conflicts / nbclausesbeforereduce) + 1;

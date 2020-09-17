@@ -18,12 +18,12 @@ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 **************************************************************************************************/
 
-#ifndef Minisat_Heap_h
-#define Minisat_Heap_h
+#ifndef Glucose_Heap_h
+#define Glucose_Heap_h
 
 #include "mtl/Vec.h"
 
-namespace Minisat
+namespace Glucose
 {
 
 //=================================================================================================
@@ -156,6 +156,6 @@ template <class Comp> class Heap
 
 
 //=================================================================================================
-} // namespace Minisat
+} // namespace Glucose
 
 #endif
