@@ -216,6 +216,7 @@ class Solver
     //
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts, conflicts_VSIDS;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
+    uint64_t chrono_backtrack, non_chrono_backtrack;
 
     vec<uint32_t> picked;
     vec<uint32_t> conflicted;
@@ -257,6 +258,13 @@ class Solver
         VarOrderLt(const vec<double> &act) : activity(act) {}
     };
 
+    struct ConflictData {
+        ConflictData() : nHighestLevel(-1), bOnlyOneLitFromHighest(false) {}
+
+        int nHighestLevel;
+        bool bOnlyOneLitFromHighest;
+    };
+
     // Solver state:
     //
     bool ok;           // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
@@ -292,6 +300,9 @@ class Solver
 
     ClauseAllocator ca;
 
+    int confl_to_chrono;
+    int chrono;
+
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
     //
@@ -316,10 +327,10 @@ class Solver
 
     // Main internal methods:
     //
-    void insertVarOrder(Var x);                           // Insert a variable in the decision order priority queue.
-    Lit pickBranchLit();                                  // Return the next decision variable.
-    void newDecisionLevel();                              // Begins a new decision level.
-    void uncheckedEnqueue(Lit p, CRef from = CRef_Undef); // Enqueue a literal. Assumes value of literal is undefined.
+    void insertVarOrder(Var x); // Insert a variable in the decision order priority queue.
+    Lit pickBranchLit();        // Return the next decision variable.
+    void newDecisionLevel();    // Begins a new decision level.
+    void uncheckedEnqueue(Lit p, int level = 0, CRef from = CRef_Undef); // Enqueue a literal. Assumes value of literal is undefined.
     bool enqueue(Lit p, CRef from = CRef_Undef); // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef propagate();                            // Perform unit propagation. Returns possibly conflicting clause.
     void cancelUntil(int level);                 // Backtrack until a certain level.
@@ -357,6 +368,8 @@ class Solver
     int decisionLevel() const;           // Gives the current decisionlevel.
     uint32_t abstractLevel(Var x) const; // Used to represent an abstraction of sets of decision levels.
     CRef reason(Var x) const;
+
+    ConflictData FindConflictLevel(CRef cind);
 
     public:
     int level(Var x) const;
@@ -532,7 +545,7 @@ inline void Solver::checkGarbage(double gf)
 // NOTE: enqueue does not set the ok flag! (only public methods do)
 inline bool Solver::enqueue(Lit p, CRef from)
 {
-    return value(p) != l_Undef ? value(p) != l_False : (uncheckedEnqueue(p, from), true);
+    return value(p) != l_Undef ? value(p) != l_False : (uncheckedEnqueue(p, decisionLevel(), from), true);
 }
 inline bool Solver::addClause(const vec<Lit> &ps)
 {
@@ -681,7 +694,6 @@ inline void Solver::toDimacs(const char *file, Lit p, Lit q, Lit r)
     as.push(r);
     toDimacs(file, as);
 }
-
 
 //=================================================================================================
 // Debug etc:
