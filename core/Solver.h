@@ -1,4 +1,12 @@
 /****************************************************************************************[Solver.h]
+ Glucose -- Copyright (c) 2009, Gilles Audemard, Laurent Simon
+                CRIL - Univ. Artois, France
+                LRI  - Univ. Paris Sud, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose are exactly the same as Minisat on which it is based on. (see below).
+
+---------------
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
 
@@ -21,6 +29,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #ifndef Minisat_Solver_h
 #define Minisat_Solver_h
 
+#include "core/BoundedQueue.h"
+#include "core/Constants.h"
 #include "core/SolverTypes.h"
 #include "mtl/Alg.h"
 #include "mtl/Heap.h"
@@ -68,7 +78,8 @@ class Solver
     void toDimacs(FILE *f, const vec<Lit> &assumps); // Write CNF to file in DIMACS-format.
     void toDimacs(const char *file, const vec<Lit> &assumps);
     void toDimacs(FILE *f, Clause &c, vec<Var> &map, Var &max);
-
+    void printLit(Lit l);
+    void printClause(CRef c);
     // Convenience versions of 'toDimacs()':
     void toDimacs(const char *file);
     void toDimacs(const char *file, Lit p);
@@ -136,7 +147,8 @@ class Solver
 
     // Statistics: (read-only member variable)
     //
-    uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
+    uint64_t nbRemovedClauses, nbReducedClauses, nbDL2, nbBin, nbUn, nbReduceDB, solves, starts, decisions,
+    rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
     protected:
@@ -172,15 +184,19 @@ class Solver
         VarOrderLt(const vec<double> &act) : activity(act) {}
     };
 
+
     // Solver state:
     //
-    bool ok;           // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
-    vec<CRef> clauses; // List of problem clauses.
-    vec<CRef> learnts; // List of learnt clauses.
-    double cla_inc;    // Amount to bump next clause with.
+    bool ok;        // If FALSE, the constraints are already unsatisfiable. No part of the solver state may be used!
+    double cla_inc; // Amount to bump next clause with.
     vec<double> activity; // A heuristic measurement of the activity of a variable.
     double var_inc;       // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted> watches; // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
+    OccLists<Lit, vec<Watcher>, WatcherDeleted> watchesBin; // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
+    vec<CRef> clauses; // List of problem clauses.
+    vec<CRef> learnts; // List of learnt clauses.
+
+
     vec<lbool> assigns;   // The current assignments.
     vec<char> polarity;   // The preferred polarity of each variable.
     vec<char> decision;   // Declares if a variable is eligible for selection in the decision heuristic.
@@ -194,8 +210,19 @@ class Solver
     Heap<VarOrderLt> order_heap; // A priority queue of variables ordered with respect to the variable activity.
     double progress_estimate;    // Set by 'search()'.
     bool remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
+    vec<unsigned long> permDiff; // permDiff[var] contains the current conflict number... Used to count the number of LBD
+
+#ifdef UPDATEVARACTIVITY
+    // UPDATEVARACTIVITY trick (see competition'09 companion paper)
+    vec<Lit> lastDecisionLevel;
+#endif
 
     ClauseAllocator ca;
+
+    int nbclausesbeforereduce; // To know when it is time to reduce clause database
+
+    bqueue<unsigned int> nbDecisionLevelHistory; // Set of last decision level in conflict clauses
+    float totalSumOfDecisionLevel;
 
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
@@ -204,6 +231,8 @@ class Solver
     vec<Lit> analyze_stack;
     vec<Lit> analyze_toclear;
     vec<Lit> add_tmp;
+    unsigned long MYFLAG;
+
 
     double max_learnts;
     double learntsize_adjust_confl;
@@ -224,7 +253,7 @@ class Solver
     bool enqueue(Lit p, CRef from = CRef_Undef); // Test if fact 'p' contradicts current state, enqueue otherwise.
     CRef propagate();                            // Perform unit propagation. Returns possibly conflicting clause.
     void cancelUntil(int level);                 // Backtrack until a certain level.
-    void analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel); // (bt = backtrack)
+    void analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, unsigned int &nblevels); // (bt = backtrack)
     void analyzeFinal(Lit p, vec<Lit> &out_conflict); // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool litRedundant(Lit p, uint32_t abstract_levels); // (helper method for 'analyze()')
     lbool search(int nof_conflicts);                    // Search for a given number of conflicts.
@@ -470,6 +499,21 @@ inline void Solver::toDimacs(const char *file, Lit p, Lit q, Lit r)
 //=================================================================================================
 // Debug etc:
 
+
+inline void Solver::printLit(Lit l)
+{
+    printf("%s%d:%c", sign(l) ? "-" : "", var(l) + 1, value(l) == l_True ? '1' : (value(l) == l_False ? '0' : 'X'));
+}
+
+
+inline void Solver::printClause(CRef cr)
+{
+    Clause &c = ca[cr];
+    for (int i = 0; i < c.size(); i++) {
+        printLit(c[i]);
+        printf(" ");
+    }
+}
 
 //=================================================================================================
 } // namespace Minisat

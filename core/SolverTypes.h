@@ -1,4 +1,12 @@
 /***********************************************************************************[SolverTypes.h]
+ Glucose -- Copyright (c) 2009, Gilles Audemard, Laurent Simon
+                CRIL - Univ. Artois, France
+                LRI  - Univ. Paris Sud, France
+
+Glucose sources are based on MiniSat (see below MiniSat copyrights). Permissions and copyrights of
+Glucose are exactly the same as Minisat on which it is based on. (see below).
+
+---------------
 Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 Copyright (c) 2007-2010, Niklas Sorensson
 
@@ -153,7 +161,9 @@ class Clause
         unsigned learnt : 1;
         unsigned has_extra : 1;
         unsigned reloced : 1;
-        unsigned size : 27;
+        unsigned lbd : 26;
+        unsigned canbedel : 1;
+        unsigned size : 32;
     } header;
     union {
         Lit lit;
@@ -172,7 +182,8 @@ class Clause
         header.has_extra = use_extra;
         header.reloced = 0;
         header.size = ps.size();
-
+        header.lbd = 0;
+        header.canbedel = 1;
         for (int i = 0; i < ps.size(); i++) data[i].lit = ps[i];
 
         if (header.has_extra) {
@@ -234,6 +245,11 @@ class Clause
 
     Lit subsumes(const Clause &other) const;
     void strengthen(Lit p);
+    void setLBD(int i) { header.lbd = i; }
+    // unsigned int&       lbd    ()              { return header.lbd; }
+    unsigned int lbd() const { return header.lbd; }
+    void setCanBeDel(bool b) { header.canbedel = b; }
+    bool canBeDel() { return header.canbedel; }
 };
 
 
@@ -301,9 +317,11 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // Copy extra data-fields:
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
-        if (to[cr].learnt())
+        if (to[cr].learnt()) {
             to[cr].activity() = c.activity();
-        else if (to[cr].has_extra())
+            to[cr].setLBD(c.lbd());
+            to[cr].setCanBeDel(c.canBeDel());
+        } else if (to[cr].has_extra())
             to[cr].calcAbstraction();
     }
 };
@@ -469,5 +487,6 @@ inline void Clause::strengthen(Lit p)
 
 //=================================================================================================
 } // namespace Minisat
+
 
 #endif
