@@ -22,6 +22,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #define Minisat_XAlloc_h
 
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 namespace Minisat
@@ -38,8 +39,9 @@ static inline void *xrealloc(void *ptr, size_t size)
     void *mem = realloc(ptr, size);
     if (mem == NULL && errno == ENOMEM) {
         throw OutOfMemoryException();
-    } else
+    } else {
         return mem;
+    }
 }
 
 //=================================================================================================
