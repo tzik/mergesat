@@ -1,6 +1,8 @@
 /***********************************************************************************[SimpSolver.cc]
-Copyright (c) 2006,      Niklas Een, Niklas Sorensson
-Copyright (c) 2007-2010, Niklas Sorensson
+MiniSat -- Copyright (c) 2006,      Niklas Een, Niklas Sorensson
+           Copyright (c) 2007-2010, Niklas Sorensson
+
+Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,
@@ -22,7 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "mtl/Sort.h"
 #include "utils/System.h"
 
-using namespace Glucose;
+using namespace Minisat;
 
 //=================================================================================================
 // Options:
@@ -517,8 +519,10 @@ bool SimpSolver::eliminateVar(Var v)
     occurs[v].clear(true);
 
     // Free watchers lists for this variable, if possible:
-    if (watches[mkLit(v)].size() == 0) watches[mkLit(v)].clear(true);
-    if (watches[~mkLit(v)].size() == 0) watches[~mkLit(v)].clear(true);
+    watches_bin[mkLit(v)].clear(true);
+    watches_bin[~mkLit(v)].clear(true);
+    watches[mkLit(v)].clear(true);
+    watches[~mkLit(v)].clear(true);
 
     return backwardSubsumptionCheck();
 }
@@ -578,16 +582,16 @@ bool SimpSolver::eliminate(bool turn_off_elim)
     else if (!use_simplification)
         return true;
 
-    // Main simplification loop:
-    //
-
-    int toPerform = clauses.size() <= 4800000;
-
-    if (!toPerform) {
-        printf("c Too many clauses... No preprocessing\n");
+    // TODO: remove.
+    int skip = clauses.size() > 4800000;
+    if (skip) {
+        printf("c Too many clauses; skip preprocessing.\n");
+        goto cleanup;
     }
 
-    while (toPerform && (n_touched > 0 || bwdsub_assigns < trail.size() || elim_heap.size() > 0)) {
+    // Main simplification loop:
+    //
+    while (n_touched > 0 || bwdsub_assigns < trail.size() || elim_heap.size() > 0) {
 
         gatherTouchedClauses();
         // printf("  ## (time = %6.2f s) BWD-SUB: queue = %d, trail = %d\n", cpuTime(), subsumption_queue.size(), trail.size() - bwdsub_assigns);
@@ -662,8 +666,7 @@ cleanup:
     }
 
     if (verbosity >= 1 && elimclauses.size() > 0)
-        printf("c |  Eliminated clauses:     %10.2f Mb                                                                "
-               "|\n",
+        printf("|  Eliminated clauses:     %10.2f Mb                                      |\n",
                double(elimclauses.size() * sizeof(uint32_t)) / (1024 * 1024));
 
     return ok;
