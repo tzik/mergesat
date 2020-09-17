@@ -4,9 +4,12 @@ MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
 
 Chanseok Oh's MiniSat Patch Series -- Copyright (c) 2015, Chanseok Oh
 
-Maple_LCM, Based on MapleCOMSPS_DRUP --Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause
+Maple_LCM, Based on MapleCOMSPS_DRUP -- Copyright (c) 2017, Mao Luo, Chu-Min LI, Fan Xiao: implementing a learnt clause
 minimisation approach Reference: M. Luo, C.-M. Li, F. Xiao, F. Manya, and Z. L. , “An effective learnt clause
 minimization approach for cdcl sat solvers,” in IJCAI-2017, 2017, pp. to–appear.
+
+Maple_LCM_Dist, Based on Maple_LCM -- Copyright (c) 2017, Fan Xiao, Chu-Min LI, Mao Luo: using a new branching heuristic
+called Distance at the beginning of search
 
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
@@ -122,7 +125,7 @@ class Solver
     bool addClause(Lit p, Lit q);        // Add a binary clause to the solver.
     bool addClause(Lit p, Lit q, Lit r); // Add a ternary clause to the solver.
     bool addClause_(vec<Lit> &ps);       // Add a clause to the solver without making superflous internal copy. Will
-                                         // change the passed vector 'ps'.
+    // change the passed vector 'ps'.
 
     // Solving:
     //
@@ -180,7 +183,7 @@ class Solver
     //
     vec<lbool> model;  // If problem is satisfiable, this vector contains the model (if any).
     vec<Lit> conflict; // If problem is unsatisfiable (possibly under assumptions),
-                       // this vector represent the final conflict clause expressed in the assumptions.
+    // this vector represent the final conflict clause expressed in the assumptions.
 
     // Mode of operation:
     //
@@ -262,7 +265,7 @@ class Solver
     learnts_tier2, learnts_local;
     double cla_inc;           // Amount to bump next clause with.
     vec<double> activity_CHB, // A heuristic measurement of the activity of a variable.
-    activity_VSIDS;
+    activity_VSIDS, activity_distance;
     double var_inc;                                          // Amount to bump next variable with.
     OccLists<Lit, vec<Watcher>, WatcherDeleted> watches_bin, // Watches for binary clauses only.
     watches; // 'watches[lit]' is a list of constraints watching 'lit' (will go there if literal becomes true).
@@ -277,7 +280,7 @@ class Solver
     int64_t simpDB_props; // Remaining number of propagations that must be made before next execution of 'simplify()'.
     vec<Lit> assumptions; // Current set of assumptions provided to solve by the user.
     Heap<VarOrderLt> order_heap_CHB, // A priority queue of variables ordered with respect to the variable activity.
-    order_heap_VSIDS;
+    order_heap_VSIDS, order_heap_distance;
     double progress_estimate; // Set by 'search()'.
     bool remove_satisfied; // Indicates whether possibly inefficient linear scan for satisfied clauses should be performed in 'simplify'.
 
@@ -354,7 +357,11 @@ class Solver
     int decisionLevel() const;           // Gives the current decisionlevel.
     uint32_t abstractLevel(Var x) const; // Used to represent an abstraction of sets of decision levels.
     CRef reason(Var x) const;
+
+    public:
     int level(Var x) const;
+
+    protected:
     double progressEstimate() const; // DELETE THIS ?? IT'S NOT VERY USEFUL ...
     bool withinBudget() const;
 
@@ -414,6 +421,7 @@ class Solver
 
     static inline void binDRUP_flush(FILE *drup_file)
     {
+        //        fwrite(drup_buf, sizeof(unsigned char), buf_len, drup_file);
         fwrite_unlocked(drup_buf, sizeof(unsigned char), buf_len, drup_file);
         buf_ptr = drup_buf;
         buf_len = 0;
@@ -434,6 +442,7 @@ class Solver
 
     // Returns a random integer 0 <= x < size. Seed must never be 0.
     static inline int irand(double &seed, int size) { return (int)(drand(seed) * size); }
+
 
     // simplify
     //
@@ -462,6 +471,18 @@ class Solver
     long curSimplify;
     int nbconfbeforesimplify;
     int incSimplify;
+
+    bool collectFirstUIP(CRef confl);
+    vec<double> var_iLevel, var_iLevel_tmp;
+    uint64_t nbcollectfirstuip, nblearntclause, nbDoubleConflicts, nbTripleConflicts;
+    int uip1, uip2;
+    vec<int> pathCs;
+    CRef propagateLits(vec<Lit> &lits);
+    uint64_t previousStarts;
+    double var_iLevel_inc;
+    vec<Lit> involved_lits;
+    double my_var_decay;
+    bool DISTANCE;
 };
 
 
@@ -473,7 +494,8 @@ inline int Solver::level(Var x) const { return vardata[x].level; }
 
 inline void Solver::insertVarOrder(Var x)
 {
-    Heap<VarOrderLt> &order_heap = VSIDS ? order_heap_VSIDS : order_heap_CHB;
+    //    Heap<VarOrderLt>& order_heap = VSIDS ? order_heap_VSIDS : order_heap_CHB;
+    Heap<VarOrderLt> &order_heap = DISTANCE ? order_heap_distance : ((!VSIDS) ? order_heap_CHB : order_heap_VSIDS);
     if (!order_heap.inHeap(x) && decision[x]) order_heap.insert(x);
 }
 
@@ -573,6 +595,7 @@ inline void Solver::setDecisionVar(Var v, bool b)
     if (b && !order_heap_CHB.inHeap(v)) {
         order_heap_CHB.insert(v);
         order_heap_VSIDS.insert(v);
+        order_heap_distance.insert(v);
     }
 }
 inline void Solver::setConfBudget(int64_t x) { conflict_budget = conflicts + x; }
