@@ -163,6 +163,7 @@ class Clause
         Lit lit;
         float act;
         uint32_t abs;
+        uint32_t touched;
         CRef rel;
     } data[0];
 
@@ -173,7 +174,7 @@ class Clause
     {
         header.mark = 0;
         header.learnt = learnt;
-        header.has_extra = use_extra;
+        header.has_extra = learnt | use_extra;
         header.reloced = 0;
         header.size = ps.size();
         header.lbd = 0;
@@ -182,9 +183,10 @@ class Clause
         for (int i = 0; i < ps.size(); i++) data[i].lit = ps[i];
 
         if (header.has_extra) {
-            if (header.learnt)
+            if (header.learnt) {
                 data[header.size].act = 0;
-            else
+                data[header.size + 1].touched = 0;
+            } else
                 calcAbstraction();
         }
     }
@@ -224,7 +226,7 @@ class Clause
     int lbd() const { return header.lbd; }
     void set_lbd(int lbd) { header.lbd = lbd; }
     bool removable() const { return header.removable; }
-    void removable(bool b) { header.removable = b ? 1 : 0; }
+    void removable(bool b) { header.removable = b; }
 
     // NOTE: somewhat unsafe to change the clause in-place! Must manually call 'calcAbstraction' afterwards for
     //       subsumption operations to behave correctly.
@@ -232,6 +234,11 @@ class Clause
     Lit operator[](int i) const { return data[i].lit; }
     operator const Lit *(void) const { return (Lit *)data; }
 
+    uint32_t &touched()
+    {
+        assert(header.has_extra && header.learnt);
+        return data[header.size + 1].touched;
+    }
     float &activity()
     {
         assert(header.has_extra);
@@ -255,9 +262,9 @@ class Clause
 const CRef CRef_Undef = RegionAllocator<uint32_t>::Ref_Undef;
 class ClauseAllocator : public RegionAllocator<uint32_t>
 {
-    static int clauseWord32Size(int size, bool has_extra)
+    static int clauseWord32Size(int size, int extras)
     {
-        return (sizeof(Clause) + (sizeof(Lit) * (size + (int)has_extra))) / sizeof(uint32_t);
+        return (sizeof(Clause) + (sizeof(Lit) * (size + extras))) / sizeof(uint32_t);
     }
 
     public:
@@ -276,10 +283,10 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
     {
         assert(sizeof(Lit) == sizeof(uint32_t));
         assert(sizeof(float) == sizeof(uint32_t));
-        bool use_extra = learnt | extra_clause_field;
+        int extras = learnt ? 2 : (int)extra_clause_field;
 
-        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), use_extra));
-        new (lea(cid)) Clause(ps, use_extra, learnt);
+        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(ps.size(), extras));
+        new (lea(cid)) Clause(ps, extra_clause_field, learnt);
 
         return cid;
     }
@@ -294,7 +301,8 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
     void free(CRef cid)
     {
         Clause &c = operator[](cid);
-        RegionAllocator<uint32_t>::free(clauseWord32Size(c.size(), c.has_extra()));
+        int extras = c.learnt() ? 2 : (int)c.has_extra();
+        RegionAllocator<uint32_t>::free(clauseWord32Size(c.size(), extras));
     }
 
     void reloc(CRef &cr, ClauseAllocator &to)
@@ -313,6 +321,7 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
         // (This could be cleaned-up. Generalize Clause-constructor to be applicable here instead?)
         to[cr].mark(c.mark());
         if (to[cr].learnt()) {
+            to[cr].touched() = c.touched();
             to[cr].activity() = c.activity();
             to[cr].set_lbd(c.lbd());
             to[cr].removable(c.removable());

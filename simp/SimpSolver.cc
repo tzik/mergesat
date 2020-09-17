@@ -134,7 +134,7 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
     if (result == l_True)
         result = Solver::solve_();
     else if (verbosity >= 1)
-        printf("===============================================================================\n");
+        printf("c ===============================================================================\n");
 
     if (result == l_True) extendModel();
 
@@ -317,7 +317,7 @@ bool SimpSolver::implied(const vec<Lit> &c)
     for (int i = 0; i < c.size(); i++)
         if (value(c[i]) == l_True) {
             cancelUntil(0);
-            return false;
+            return true;
         } else if (value(c[i]) != l_False) {
             assert(value(c[i]) == l_Undef);
             uncheckedEnqueue(~c[i]);
@@ -361,7 +361,7 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
         if (c.mark()) continue;
 
         if (verbose && verbosity >= 2 && cnt++ % 1000 == 0)
-            printf("subsumption left: %10d (%10d subsumed, %10d deleted literals)\r", subsumption_queue.size(),
+            printf("c subsumption left: %10d (%10d subsumed, %10d deleted literals)\r", subsumption_queue.size(),
                    subsumed, deleted_literals);
 
         assert(c.size() > 1 || value(c[0]) == l_True); // Unit-clauses should have been propagated before this point.
@@ -408,9 +408,9 @@ bool SimpSolver::asymm(Var v, CRef cr)
     trail_lim.push(trail.size());
     Lit l = lit_Undef;
     for (int i = 0; i < c.size(); i++)
-        if (var(c[i]) != v && value(c[i]) != l_False)
-            uncheckedEnqueue(~c[i]);
-        else
+        if (var(c[i]) != v) {
+            if (value(c[i]) != l_False) uncheckedEnqueue(~c[i]);
+        } else
             l = c[i];
 
     if (propagate() != CRef_Undef) {
@@ -617,7 +617,7 @@ bool SimpSolver::eliminate(bool turn_off_elim)
 
             if (isEliminated(elim) || value(elim) != l_Undef) continue;
 
-            if (verbosity >= 2 && cnt % 100 == 0) printf("elimination left: %10d\r", elim_heap.size());
+            if (verbosity >= 2 && cnt % 100 == 0) printf("c elimination left: %10d\r", elim_heap.size());
 
             if (use_asymm) {
                 // Temporarily freeze variable. Otherwise, it would immediately end up on the queue again:
@@ -660,26 +660,14 @@ cleanup:
         rebuildOrderHeap();
         garbageCollect();
     } else {
-        // Cheaper cleanup:
-        cleanUpClauses(); // TODO: can we make 'cleanUpClauses()' not be linear in the problem size somehow?
         checkGarbage();
     }
 
     if (verbosity >= 1 && elimclauses.size() > 0)
-        printf("|  Eliminated clauses:     %10.2f Mb                                      |\n",
+        printf("c |  Eliminated clauses:     %10.2f Mb                                      |\n",
                double(elimclauses.size() * sizeof(uint32_t)) / (1024 * 1024));
 
     return ok;
-}
-
-
-void SimpSolver::cleanUpClauses()
-{
-    occurs.cleanAll();
-    int i, j;
-    for (i = j = 0; i < clauses.size(); i++)
-        if (ca[clauses[i]].mark() == 0) clauses[j++] = clauses[i];
-    clauses.shrink(i - j);
 }
 
 
@@ -693,6 +681,7 @@ void SimpSolver::relocAll(ClauseAllocator &to)
 
     // All occurs lists:
     //
+    occurs.cleanAll();
     for (int i = 0; i < nVars(); i++) {
         vec<CRef> &cs = occurs[i];
         for (int j = 0; j < cs.size(); j++) ca.reloc(cs[j], to);
@@ -714,12 +703,11 @@ void SimpSolver::garbageCollect()
     // is not precise but should avoid some unnecessary reallocations for the new region:
     ClauseAllocator to(ca.size() - ca.wasted());
 
-    cleanUpClauses();
     to.extra_clause_field = ca.extra_clause_field; // NOTE: this is important to keep (or lose) the extra fields.
     relocAll(to);
     Solver::relocAll(to);
     if (verbosity >= 2)
-        printf("|  Garbage collection:   %12d bytes => %12d bytes             |\n",
+        printf("c |  Garbage collection:   %12d bytes => %12d bytes             |\n",
                ca.size() * ClauseAllocator::Unit_Size, to.size() * ClauseAllocator::Unit_Size);
     to.moveTo(ca);
 }
