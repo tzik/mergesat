@@ -466,6 +466,9 @@ class Solver
     int learnCallbackLimit;
     void (*learnCallback)(void *state, int *clause);
 
+    // parallel solving
+    lbool sync_and_share();
+
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
     //

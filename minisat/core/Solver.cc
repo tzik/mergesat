@@ -3152,6 +3152,9 @@ lbool Solver::solve_()
             status = search(nof_conflicts);
         }
 
+        // check with parallel co-workers
+        if (status == l_Undef) status = sync_and_share();
+
         // toggle VSIDS?
         // if (switch_mode) {
         if (starts - last_switch_conflicts > switch_heristic_mod) {
@@ -3210,6 +3213,19 @@ lbool Solver::solve_()
     statistics.solveSeconds += cpuTime() - solve_start; // stop timer and record time consumed until now
 
     return status;
+}
+
+lbool Solver::sync_and_share()
+{
+    /* Implement synchronization and sharing
+     * 1: check whether we should sync with others based on counter
+     * 2: while a thread waits, increase a counter
+     * 3: share and receive clauses in a deterministic way, adjust sharing bounds in case of too many/few clauses
+     * 4: calculate numbers per thread until next rendezvous
+     * 5: clean structures
+     * 6: continue
+     */
+    return l_Undef;
 }
 
 //=================================================================================================
