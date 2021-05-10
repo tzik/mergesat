@@ -36,7 +36,7 @@ namespace MERGESAT_NSPACE
 static inline double cpuTime(void); // CPU-time in seconds.
 extern double memUsed();            // Memory in mega bytes (returns 0 for unsupported architectures).
 extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for unsupported architectures).
-
+extern int nrCores();               // Number of available cores
 } // namespace MERGESAT_NSPACE
 
 //-------------------------------------------------------------------------------------------------

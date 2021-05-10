@@ -24,6 +24,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/sysinfo.h> // get number of available cores
 
 using namespace MERGESAT_NSPACE;
 
@@ -72,6 +73,12 @@ double MERGESAT_NSPACE::memUsedPeak()
 {
     double peak = memReadPeak() / 1024;
     return peak == 0 ? memUsed() : peak;
+}
+
+int MERGESAT_NSPACE::nrCores()
+{
+    /* tood: dynamically find the number */
+    return 4;
 }
 
 #elif defined(__FreeBSD__)
