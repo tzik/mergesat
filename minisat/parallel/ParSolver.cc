@@ -19,6 +19,7 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 
 #include "parallel/ParSolver.h"
 #include "mtl/Sort.h"
+#include "parallel/JobQueue.h"
 #include "utils/Options.h"
 #include "utils/System.h"
 
@@ -120,12 +121,27 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
     assert((!primary_modified || solvers.size() == 1) && "sync solvers before solving");
 
     lbool ret = l_Undef;
-    model.swap(solvers[0]->model);
-    conflict.swap(solvers[0]->conflict);
-    assert(solvers.size() == 1 && "actually implement parallel case");
-    ret = solvers[0]->solveLimited(assumps, do_simp, turn_off_simp);
-    conflict.swap(solvers[0]->conflict);
-    model.swap(solvers[0]->model);
+    if (sequential()) {
+        model.swap(solvers[0]->model);
+        conflict.swap(solvers[0]->conflict);
+        assert(solvers.size() == 1 && "actually implement parallel case");
+        ret = solvers[0]->solveLimited(assumps, do_simp, turn_off_simp);
+        conflict.swap(solvers[0]->conflict);
+        model.swap(solvers[0]->model);
+    } else {
+#warning TODO: create one job per core
+        jobqueue->setState(JobQueue::SLEEP);
+        for (int t = 0; t < cores; ++t) {
+            JobQueue::Job job;
+            job.function = &(ParSolver::thread_entrypoint); // function that controls how a solver runs
+            job.argument = (void *)&(solverData[t]);
+            jobqueue->addJob(job);
+        }
+        jobqueue->setState(JobQueue::WORKING);
+
+        // ... wait,  consume result, set 'ret' value
+    }
+
     return ret;
 }
 
@@ -172,6 +188,18 @@ void ParSolver::init_solvers()
         solvers[i]->diversify(i, 32);
     }
 
+    if (cores > 1) {
+        assert(!jobqueue && "do not override the jobqueue");
+        if (jobqueue) delete jobqueue;
+        jobqueue = new JobQueue(cores);
+        jobqueue->setState(JobQueue::SLEEP); // set all to sleep
+
+        solverData.growTo(cores);
+        for (int i = 0; i < solvers.size(); ++i) {
+            solverData[i] = { this, i };
+        }
+    }
+
     assert(solvers[0] != nullptr && "there has to be one working solver");
     initialized = true;
 }
@@ -185,5 +213,16 @@ void ParSolver::tear_down_solvers()
         }
     }
     solvers.clear();
+    solverData.clear();
     initialized = false;
+}
+
+void ParSolver::thread_run(size_t threadnr) { std::cout << "c started thread " << threadnr << std::endl; }
+
+void *ParSolver::thread_entrypoint(void *argument)
+{
+    SolverData *s = (SolverData *)argument;
+
+    (s->_solver)->thread_run(s->_threadnr);
+    return 0;
 }

@@ -29,10 +29,19 @@ namespace MERGESAT_NSPACE
 
 //=================================================================================================
 
+class JobQueue;
 
 class ParSolver : protected SimpSolver
 {
     bool par_reparsed_options; // Indicate whether the update parameter method has been used
+
+    /* structure, that holds relevant data for parallel solving */
+    struct SolverData {
+        ParSolver *_solver;
+        int _threadnr;
+        SolverData(ParSolver *solver, int threadnr) : _solver(solver), _threadnr(threadnr) {}
+        SolverData() : _solver(nullptr), _threadnr(0) {}
+    };
 
     public:
     // Constructor/Destructor:
@@ -84,8 +93,13 @@ class ParSolver : protected SimpSolver
     int cores; /// number of cores available to this parallel solver
     bool initialized;
     vec<SimpSolver *> solvers;
+    vec<SolverData> solverData;
 
     bool primary_modified;
+
+    JobQueue *jobqueue; /// hold jobs for parallel items
+    static void *thread_entrypoint(void *argument);
+    void thread_run(size_t threadnr);
 
     // Iternal helper methods:
     //
