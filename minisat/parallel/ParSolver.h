@@ -37,10 +37,11 @@ class ParSolver : protected SimpSolver
 
     /* structure, that holds relevant data for parallel solving */
     struct SolverData {
-        ParSolver *_solver;
+        ParSolver *_parent;
         int _threadnr;
-        SolverData(ParSolver *solver, int threadnr) : _solver(solver), _threadnr(threadnr) {}
-        SolverData() : _solver(nullptr), _threadnr(0) {}
+        lbool _status;
+        SolverData(ParSolver *parent, int threadnr) : _parent(parent), _threadnr(threadnr), _status(l_Undef) {}
+        SolverData() : _parent(nullptr), _threadnr(0), _status(l_Undef) {}
     };
 
     public:
@@ -86,6 +87,7 @@ class ParSolver : protected SimpSolver
     //
     bool parsing;
     int verbosity;
+    bool use_simplification;
 
     protected:
     // Solver state:
@@ -94,12 +96,16 @@ class ParSolver : protected SimpSolver
     bool initialized;
     vec<SimpSolver *> solvers;
     vec<SolverData> solverData;
+    vec<Lit> assumptions;
 
-    bool primary_modified;
+    bool primary_modified; // indicate whether state of primary solver has been changed (new variables or clauses)
+    size_t synced_clauses; // store number of clauses in primary solver after last sync (after solving)
+    size_t synced_units;   // store number of unit clauses in primary solver after last sync (after solving)
 
     JobQueue *jobqueue; /// hold jobs for parallel items
     static void *thread_entrypoint(void *argument);
-    void thread_run(size_t threadnr);
+    void thread_run_solve(size_t threadnr);
+    bool sync_solver_from_primary(int destination_solver_id); /// sync from primary to parallel solver
 
     // Iternal helper methods:
     //

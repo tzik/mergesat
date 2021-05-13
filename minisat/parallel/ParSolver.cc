@@ -37,7 +37,16 @@ static IntOption opt_cores(_cat, "cores", "Number of solvers to use, 0 means eac
 // Constructor/Destructor:
 
 ParSolver::ParSolver()
-  : par_reparsed_options(updateOptions()), parsing(false), verbosity(0), cores(opt_cores), initialized(false), primary_modified(false)
+  : par_reparsed_options(updateOptions())
+  , parsing(false)
+  , verbosity(0)
+  , use_simplification(true)
+  , cores(opt_cores)
+  , initialized(false)
+  , primary_modified(false)
+  , synced_clauses(0)
+  , synced_units(0)
+  , jobqueue(nullptr)
 {
     // Get number of cores, and allocate arrays
     init_solvers();
@@ -89,7 +98,7 @@ void ParSolver::addInputClause_(vec<Lit> &ps)
 void ParSolver::setFrozen(Var v, bool b)
 {
     assert(solvers[0] != nullptr && "there has to be one working solver");
-    primary_modified = true;
+    // not relevant: only primary node would run simplification primary_modified = true;
     solvers[0]->setFrozen(v, b);
 }
 
@@ -111,14 +120,13 @@ bool ParSolver::eliminate(bool turn_off_elim)
 bool ParSolver::solve(const vec<Lit> &assumps, bool do_simp, bool turn_off_simp)
 {
     assert(solvers[0] != nullptr && "there has to be one working solver");
+    assert(false && "support parallelism here!"); // TODO: implement simple wrapper properly
     return solvers[0]->solve(assumps, do_simp, turn_off_simp);
 }
 
 lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_off_simp)
 {
     assert(solvers[0] != nullptr && "there has to be one working solver");
-
-    assert((!primary_modified || solvers.size() == 1) && "sync solvers before solving");
 
     lbool ret = l_Undef;
     if (sequential()) {
@@ -129,17 +137,40 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
         conflict.swap(solvers[0]->conflict);
         model.swap(solvers[0]->model);
     } else {
-#warning TODO: create one job per core
-        jobqueue->setState(JobQueue::SLEEP);
-        for (int t = 0; t < cores; ++t) {
-            JobQueue::Job job;
-            job.function = &(ParSolver::thread_entrypoint); // function that controls how a solver runs
-            job.argument = (void *)&(solverData[t]);
-            jobqueue->addJob(job);
-        }
-        jobqueue->setState(JobQueue::WORKING);
+        assert(jobqueue && "object should be initialized");
 
-        // ... wait,  consume result, set 'ret' value
+        /* in case we shall simplify, first simplify sequentially (for now. TODO: might do something smart with the other threads in the future) */
+        if (use_simplification) std::cout << "c run simplification with primary solver" << std::endl;
+        if (!solvers[0]->eliminate(true)) ok = false;
+
+        if (okay()) {
+            assumps.copyTo(assumptions); // copy to shared assumptions object
+            jobqueue->setState(JobQueue::SLEEP);
+            for (int t = 1; t < cores; ++t) { // all except master now
+                if (primary_modified) {
+                    sync_solver_from_primary(t);
+                }
+
+                // assert(t < solverData.size() && "enough solver data needs to be available");
+                JobQueue::Job job;
+                job.function = &(ParSolver::thread_entrypoint); // function that controls how a solver runs
+                job.argument = (void *)&(solverData[t]);
+                jobqueue->addJob(job); // TODO: instead of queue, use a slot based data structure, to make use of core pinning
+            }
+            jobqueue->setState(JobQueue::WORKING);
+
+            // we now run search, so we should stop
+            primary_modified = false;
+            // also run the primary solver
+            thread_run_solve(0);
+            // prepare to sync from the state of the primary solver for incremental solving
+            synced_clauses = solvers[0]->nClauses();
+            synced_units = solvers[0]->nUnits();
+        }
+
+        // when returning from this, all parallel solvers are 'done' as well, i.e. do not modify relevant state anymore
+
+#warning TODO: consume result, set 'ret' value
     }
 
     return ret;
@@ -181,17 +212,23 @@ void ParSolver::init_solvers()
 
     /* make sure we have at least one solver */
     cores = cores <= 1 ? 1 : cores;
+    std::cout << "c initialize solver for " << cores << " cores" << std::endl;
 
     solvers.growTo(cores, nullptr);
     for (int i = 0; i < solvers.size(); ++i) {
         solvers[i] = new SimpSolver();
         solvers[i]->diversify(i, 32);
+        /* setup non-primary solvers specially */
+        if (i > 0) {
+            solvers[i]->eliminate(true); // we simplify only sequentially
+        }
     }
 
     if (cores > 1) {
         assert(!jobqueue && "do not override the jobqueue");
         if (jobqueue) delete jobqueue;
-        jobqueue = new JobQueue(cores);
+        std::cout << "c initialize thread pool for " << cores - 1 << " non-primary threads" << std::endl;
+        jobqueue = new JobQueue(cores - 1);  // all except the main core
         jobqueue->setState(JobQueue::SLEEP); // set all to sleep
 
         solverData.growTo(cores);
@@ -201,6 +238,10 @@ void ParSolver::init_solvers()
     }
 
     assert(solvers[0] != nullptr && "there has to be one working solver");
+
+    /* in case outside parameters decided against simplification, disable it */
+    if (!use_simplification) solvers[0]->eliminate(true);
+
     initialized = true;
 }
 
@@ -217,12 +258,66 @@ void ParSolver::tear_down_solvers()
     initialized = false;
 }
 
-void ParSolver::thread_run(size_t threadnr) { std::cout << "c started thread " << threadnr << std::endl; }
+void ParSolver::thread_run_solve(size_t threadnr)
+{
+    std::cout << "c started thread " << threadnr << std::endl;
+
+    assert(solvers == solverData.size() && "number of solvers and data should match");
+    assert(threadnr < solverData.size() && "cannot run threads beyond initialized cores");
+    if (threadnr >= solverData.size()) {
+        return; // do not interrupt too aggressively
+    }
+
+    // stop early, in case solver is in a bad state initially already
+    if (!solvers[threadnr]->okay()) {
+        solverData[threadnr]._status = l_False;
+        return;
+    }
+    solverData[threadnr]._status = l_Undef;
+    solverData[threadnr]._status = solvers[threadnr]->solveLimited(assumptions);
+}
 
 void *ParSolver::thread_entrypoint(void *argument)
 {
     SolverData *s = (SolverData *)argument;
 
-    (s->_solver)->thread_run(s->_threadnr);
+    (s->_parent)->thread_run_solve(s->_threadnr);
     return 0;
+}
+
+bool ParSolver::sync_solver_from_primary(int destination_solver_id)
+{
+    if (!primary_modified) return false;
+    std::cout << "c sync solver " << destination_solver_id << " from primary solver object" << std::endl;
+    SimpSolver *const dest_solver = solvers[destination_solver_id];
+    SimpSolver *const source_solver = solvers[0];
+
+    // sync variables
+    if (dest_solver->nVars() < source_solver->nVars()) {
+        std::cout << "c resolve variable diff: " << source_solver->nVars() - dest_solver->nVars() << std::endl;
+        dest_solver->reserveVars(source_solver->nVars());
+        while (dest_solver->nVars() < source_solver->nVars()) {
+            // ignore eliminated variables for decisions
+            Var next = dest_solver->nVars();
+            dest_solver->newVar(true, !source_solver->isEliminated(next));
+        }
+    }
+    // sync unit clauses
+    bool succeed_adding_clauses = true;
+    std::cout << "c resolve unit diff: " << source_solver->nUnits() - synced_units << std::endl;
+    for (size_t unit_idx = synced_units; unit_idx < source_solver->nUnits(); ++unit_idx) {
+        const Lit l = source_solver->getUnit(unit_idx);
+        succeed_adding_clauses = succeed_adding_clauses && dest_solver->addClause(l);
+    }
+
+    // sync clauses (after simplification, this will only sync the simplified clauses)
+    std::cout << "c resolve unit diff: " << source_solver->nClauses() - synced_clauses << std::endl;
+    for (size_t cls_idx = synced_clauses; cls_idx < source_solver->nClauses(); ++cls_idx) {
+        const Clause &c = source_solver->getClause(cls_idx);
+        if (c.mark() == 1) continue; // skip satisfied clauses
+        succeed_adding_clauses = succeed_adding_clauses && dest_solver->importClause(c);
+    }
+
+    // sub solver object is not unsat
+    return succeed_adding_clauses && dest_solver->okay();
 }
