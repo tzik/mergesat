@@ -1020,9 +1020,6 @@ bool Solver::addClause_(vec<Lit> &ps)
         }
     ps.shrink(i - j);
 
-    /* if there are new clauses, we cannot claim that SLS solved the formula anymore */
-    solved_by_ls = false;
-
     if (drup_file && i != j) {
 #ifdef BIN_DRUP
         binDRUP('a', ps, drup_file);
@@ -1038,6 +1035,9 @@ bool Solver::addClause_(vec<Lit> &ps)
 #endif
     }
 
+
+    /* if there are new clauses, we cannot claim that SLS solved the formula anymore */
+    solved_by_ls = false;
     if (ps.size() == 0)
         return ok = false;
     else if (ps.size() == 1) {
@@ -1057,6 +1057,42 @@ bool Solver::addClause_(vec<Lit> &ps)
     return true;
 }
 
+bool Solver::importClause(const Clause &c)
+{
+    assert(decisionLevel() == 0 && "only import clauses on level 0");
+    // make writable copy
+    CRef cr = ca.alloc(c, false);
+    Clause &copy = ca[cr];
+    int i, j;
+    Lit p;
+
+    for (i = j = 0, p = lit_Undef; i < c.size(); i++) {
+        assert(p != copy[i] && "imported clauses should not be redundant");
+        assert(p != ~copy[i] && "imported clauses should not be trivial");
+        if (value(copy[i]) == l_True) {
+            copy.mark(1); // clause is satisfied, make as 'garbage'
+            return true;
+        } else if (value(copy[i]) != l_False) {
+            copy[j++] = p = copy[i];
+        }
+    }
+    copy.shrink(i - j);
+
+    /* if there are new clauses, we cannot claim that SLS solved the formula anymore */
+    solved_by_ls = false;
+
+    if (copy.size() == 0)
+        return ok = false;
+    else if (copy.size() == 1) {
+        uncheckedEnqueue(copy[0], 0);
+        return ok = (propagate() == CRef_Undef);
+    } else {
+        clauses.push(cr);
+        attachClause(cr);
+    }
+
+    return true;
+}
 
 void Solver::attachClause(CRef cr)
 {

@@ -197,10 +197,13 @@ class Solver
     lbool value(Lit p) const; // The current value of a literal.
     lbool modelValue(Var x) const; // The value of a variable in the last model. The last call to solve must have been satisfiable.
     lbool modelValue(Lit p) const; // The value of a literal in the last model. The last call to solve must have been satisfiable.
-    int nAssigns() const; // The current number of assigned literals.
-    int nClauses() const; // The current number of original clauses.
-    int nLearnts() const; // The current number of learnt clauses.
-    int nVars() const;    // The current number of variables.
+    int nAssigns() const;                          // The current number of assigned literals.
+    int nClauses() const;                          // The current number of original clauses.
+    int nLearnts() const;                          // The current number of learnt clauses.
+    int nUnits() const;                            // The current number of unit clauses.
+    const Lit getUnit(size_t unit_idx) const;      // The clause with a given index;
+    const Clause &getClause(size_t cls_idx) const; // The clause with a given index;
+    int nVars() const;                             // The current number of variables.
     int nFreeVars() const;
 
     // Resource contraints:
@@ -752,7 +755,7 @@ class Solver
     int lastDecision;                           // the last decision made by the solver
     void addLearnedClause(const vec<Lit> &cls); // add a learned clause by hand
     void diversify(int rank, int size);         // set parameters based on position in set, and set size
-
+    bool importClause(const Clause &c);         // import 'input' (or formula) clause from another solver
 
     // in redundant
     bool removed(CRef cr);
@@ -930,6 +933,17 @@ inline lbool Solver::modelValue(Var x) const { return model[x]; }
 inline lbool Solver::modelValue(Lit p) const { return model[var(p)] ^ sign(p); }
 inline int Solver::nAssigns() const { return trail.size(); }
 inline int Solver::nClauses() const { return clauses.size(); }
+inline int Solver::nUnits() const { return trail_lim.size() < 1 ? trail.size() : trail_lim[0]; }
+inline const Lit Solver::getUnit(size_t unit_idx) const
+{
+    assert(unit_idx < nUnits() && "can only access valid unit clauses");
+    return trail[unit_idx];
+}
+inline const Clause &Solver::getClause(size_t cls_idx) const
+{
+    assert(cls_idx < nClauses() && "can only access valid clauses");
+    return ca[clauses[cls_idx]];
+}
 inline int Solver::nLearnts() const { return learnts_core.size() + learnts_tier2.size() + learnts_local.size(); }
 inline int Solver::nVars() const { return vardata.size(); }
 inline int Solver::nFreeVars() const { return (int)dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]); }
