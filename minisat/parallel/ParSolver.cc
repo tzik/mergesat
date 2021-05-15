@@ -128,7 +128,11 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
 {
     assert(solvers[0] != nullptr && "there has to be one working solver");
 
+    /* prepare next search iteration */
     lbool ret = l_Undef;
+    conflict.clear();
+    model.clear();
+
     if (sequential()) {
         model.swap(solvers[0]->model);
         conflict.swap(solvers[0]->conflict);
