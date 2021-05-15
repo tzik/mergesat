@@ -40,6 +40,7 @@ namespace MERGESAT_NSPACE
 
 //=================================================================================================
 
+class ParSolver;
 
 class SimpSolver : public Solver
 {
@@ -189,6 +190,9 @@ class SimpSolver : public Solver
     void relocAll(ClauseAllocator &to);
 
     bool isInSimpLimit();
+
+    /* allow accessing internal methods */
+    friend class ParSolver;
 };
 
 
