@@ -30,6 +30,7 @@ namespace MERGESAT_NSPACE
 //=================================================================================================
 
 class JobQueue;
+class Barrier;
 
 class ParSolver : protected SimpSolver
 {
@@ -102,7 +103,8 @@ class ParSolver : protected SimpSolver
     size_t synced_clauses; // store number of clauses in primary solver after last sync (after solving)
     size_t synced_units;   // store number of unit clauses in primary solver after last sync (after solving)
 
-    JobQueue *jobqueue; /// hold jobs for parallel items
+    JobQueue *jobqueue;      /// hold jobs for parallel items
+    Barrier *solvingBarrier; /// sync execution after parallel solveing (prt for simpler integration)
     static void *thread_entrypoint(void *argument);
     void thread_run_solve(size_t threadnr);
     bool sync_solver_from_primary(int destination_solver_id); /// sync from primary to parallel solver

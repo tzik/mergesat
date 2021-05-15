@@ -47,6 +47,7 @@ ParSolver::ParSolver()
   , synced_clauses(0)
   , synced_units(0)
   , jobqueue(nullptr)
+  , solvingBarrier(nullptr)
 {
     // Get number of cores, and allocate arrays
     init_solvers();
@@ -278,6 +279,8 @@ void ParSolver::init_solvers()
         jobqueue = new JobQueue(cores - 1);  // all except the main core
         jobqueue->setState(JobQueue::SLEEP); // set all to sleep
 
+        solvingBarrier = new Barrier(0); // setup a dummy barrier for now
+
         solverData.growTo(cores);
         for (int i = 0; i < solvers.size(); ++i) {
             solverData[i] = { this, i };
@@ -302,6 +305,8 @@ void ParSolver::tear_down_solvers()
     }
     solvers.clear();
     solverData.clear();
+    if (solvingBarrier) delete solvingBarrier;
+    solvingBarrier = nullptr;
     if (jobqueue) delete jobqueue;
     jobqueue = nullptr;
 
