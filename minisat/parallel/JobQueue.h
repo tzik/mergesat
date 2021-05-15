@@ -25,10 +25,116 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include <pthread.h>
 #include <semaphore.h>
 
+#include <cassert>
+#include <condition_variable>
+
 namespace MERGESAT_NSPACE
 {
 
 bool isAdressContentZero(volatile void *address) { return address == 0; }
+
+/* object that blocks threads until a predefined number of threads reached a given point */
+class Barrier
+{
+    public:
+    Barrier(size_t nb_threads = 0)
+      : m_mutex(), m_condition(), m_nb_threads(nb_threads), m_capacity(nb_threads), m_count_down(true)
+    {
+    }
+
+    Barrier(const Barrier &barrier) = delete;
+    Barrier(Barrier &&barrier) = delete;
+    ~Barrier() noexcept
+    {
+        assert((0u == m_nb_threads || m_nb_threads == m_capacity) && "do not destruct with sleeping threads");
+    }
+    Barrier &operator=(const Barrier &barrier) = delete;
+    Barrier &operator=(Barrier &&barrier) = delete;
+
+    /* wait in this method until the predefined number of threads have reached this function call */
+    void wait()
+    {
+        std::unique_lock<std::mutex> lock{ m_mutex };
+
+        if (m_count_down) /* we are currently decrementing */
+        {
+            assert(0u != m_nb_threads);
+            /* counting down */
+            if (--m_nb_threads == 0) {
+                m_count_down = !m_count_down;
+                m_condition.notify_all();
+            } else {
+                /* block while counting down */
+                m_condition.wait(lock, [this] { return m_count_down == false; });
+            }
+        }
+
+        else /* we are currently incrementing */
+        {
+            assert(0u != m_capacity);
+            /* counting up */
+            if (++m_nb_threads == m_capacity) {
+                m_count_down = !m_count_down;
+                m_condition.notify_all();
+            } else {
+                /* block while counting up */
+                m_condition.wait(lock, [this] { return m_count_down == true; });
+            }
+        }
+    }
+
+    /* allow a greater number of threads to be blocked, return success */
+    bool grow(size_t new_capacity)
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        /* cannot remove threads from the barrier */
+        if (new_capacity < m_capacity) return false;
+
+        /* if we are currently decrementing, increase number of threads that need to enter */
+        if (m_count_down) {
+            m_nb_threads += new_capacity - m_capacity;
+        }
+
+        /* otherwise, number of threads that still need to enter will increase automatically with the next line */
+        m_capacity = new_capacity;
+
+        assert(m_capacity >= m_nb_threads && "cannot have more threads than capacity");
+        return true;
+    }
+
+    /* allow to check how many threads still need to enter before all are released */
+    size_t remaining(bool locked = false)
+    {
+        assert(m_capacity >= m_nb_threads && "cannot have more threads than capacity");
+        if (locked) {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            return (m_count_down ? m_nb_threads : m_capacity - m_nb_threads);
+        }
+        return (m_count_down ? m_nb_threads : m_capacity - m_nb_threads);
+    }
+
+    /* indicate whether currently no thread is blocking in this barrier */
+    bool empty(bool locked = false) { return remaining(locked) == m_capacity; }
+
+    /* signal number of threads to be blocked */
+    size_t capacity(bool locked = false)
+    {
+        if (locked) {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            return m_capacity;
+        }
+        return m_capacity;
+    }
+
+    private:
+    std::mutex m_mutex;                  // lock variable
+    std::condition_variable m_condition; // variable to block on, with sleeping
+    size_t m_nb_threads; // number of threads that need to hit the block before continuing (oth that already hit the block, when counting up)
+    size_t m_capacity; // number of expected threads when resetting the barrier
+    bool m_count_down; // store state, whether we currently increment or decrement
+};
+
 
 class JobQueue
 {
