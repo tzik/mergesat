@@ -31,6 +31,12 @@ using namespace MERGESAT_NSPACE;
 // TODO: split the memory reading functions into two: one for reading high-watermark of RSS, and
 // one for reading the current virtual memory size.
 
+#if defined(_MSC_VER) || defined(__MINGW32__)
+
+#else
+std::chrono::steady_clock::time_point process_start = std::chrono::steady_clock::now();
+#endif
+
 static inline int memReadStat(int field)
 {
     char name[256];

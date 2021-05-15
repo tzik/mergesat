@@ -33,10 +33,11 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 namespace MERGESAT_NSPACE
 {
 
-static inline double cpuTime(void); // CPU-time in seconds.
-extern double memUsed();            // Memory in mega bytes (returns 0 for unsupported architectures).
-extern double memUsedPeak();        // Peak-memory in mega bytes (returns 0 for unsupported architectures).
-extern int nrCores();               // Number of available cores
+static inline double cpuTime(void);       // CPU-time in seconds.
+static inline double wallClockTime(void); // Wall-Clock-time in seconds
+extern double memUsed();                  // Memory in mega bytes (returns 0 for unsupported architectures).
+extern double memUsedPeak();              // Peak-memory in mega bytes (returns 0 for unsupported architectures).
+extern int nrCores();                     // Number of available cores
 } // namespace MERGESAT_NSPACE
 
 //-------------------------------------------------------------------------------------------------
@@ -46,6 +47,8 @@ extern int nrCores();               // Number of available cores
 #include <time.h>
 
 static inline double MERGESAT_NSPACE::cpuTime(void) { return (double)clock() / CLOCKS_PER_SEC; }
+#warning WALLCLOCKTIME NOT SUPPORTED HERE
+static inline double Minisat::wallClockTime(void) { return (double)clock() / CLOCKS_PER_SEC; }
 
 #else
 #include <sys/resource.h>
@@ -57,6 +60,17 @@ static inline double MERGESAT_NSPACE::cpuTime(void)
     struct rusage ru;
     getrusage(RUSAGE_SELF, &ru);
     return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec / 1000000;
+}
+
+#include <chrono>
+
+extern std::chrono::steady_clock::time_point process_start;
+
+static inline double Minisat::wallClockTime(void)
+{
+    std::chrono::microseconds us =
+    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - process_start);
+    return us.count() / 1000000.0;
 }
 
 #endif
