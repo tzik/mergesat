@@ -235,7 +235,7 @@ bool ParSolver::okay() const
     for (int i = 0; i < solvers.size(); ++i) {
         if (!solvers[i]->okay()) return false;
     }
-    return true;
+    return ok;
 }
 
 int ParSolver::max_simp_cls()
