@@ -180,6 +180,49 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
     return ret;
 }
 
+lbool ParSolver::collect_solvers_results()
+{
+    lbool status = l_Undef;
+    size_t smallest_conflict = ~0UL;
+    int smallest_conflict_idx = -1, sat_solver = -1;
+    for (int t = 0; t < cores; ++t) { // all except master now
+        lbool r = solverData[t]._status;
+        assert((status == l_Undef || r == l_Undef || status == r) && "solvers have to have same result");
+
+        /* pick 'winning solver' */
+        if (r != l_Undef) {
+            /* for conflicts, heuristicalls select the smallest conflict */
+            if (r == l_False && solvers[t]->conflict.size() < smallest_conflict) {
+                smallest_conflict_idx = t;
+            } else if (r == l_True) {
+                /* select the first solver that won */
+                sat_solver = sat_solver >= 0 ? sat_solver : t;
+            }
+
+            if (status != l_Undef && r != status) {
+                throw "c detected unsound parallel behavior when collecting results, aborting";
+            }
+            status = r;
+        }
+    }
+
+    /* update model or conflict */
+    if (status == l_True) {
+        /* in case we used elimination, we also have to fix the model (unless, the first solver won) */
+        if (sat_solver != 0) {
+            solvers[sat_solver]->model.moveTo(solvers[0]->model);
+            solvers[0]->extendModel();
+        }
+        /* at this point, solver 0 holds the valid model */
+        solvers[0]->model.moveTo(model);
+    } else if (status == l_False) {
+        assert(smallest_conflict_idx >= 0 && "at least one index has been found");
+        solvers[smallest_conflict_idx]->conflict.moveTo(conflict);
+    }
+
+    return status;
+}
+
 void ParSolver::interrupt()
 {
     assert(solvers[0] != nullptr && "there has to be one working solver");

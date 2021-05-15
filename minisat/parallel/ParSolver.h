@@ -106,6 +106,7 @@ class ParSolver : protected SimpSolver
     static void *thread_entrypoint(void *argument);
     void thread_run_solve(size_t threadnr);
     bool sync_solver_from_primary(int destination_solver_id); /// sync from primary to parallel solver
+    lbool collect_solvers_results();
 
     // Iternal helper methods:
     //
