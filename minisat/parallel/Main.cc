@@ -46,10 +46,12 @@ using namespace MERGESAT_NSPACE;
 
 //=================================================================================================
 
-
 void printStats(ParSolver &solver)
 {
     solver.printStats();
+    double wall_clock = wallClockTime();
+    printf("c Wall time             : %g s\n", wall_clock);
+
     double mem_used = memUsedPeak();
     /* access memory access functions as part of CLI files only */
     if (mem_used != 0) printf("c Memory used           : %.2f MB\n", mem_used);
