@@ -302,6 +302,9 @@ void ParSolver::tear_down_solvers()
     }
     solvers.clear();
     solverData.clear();
+    if (jobqueue) delete jobqueue;
+    jobqueue = nullptr;
+
     initialized = false;
 }
 
