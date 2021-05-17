@@ -46,6 +46,7 @@ class JobQueue
 
     static const int SLEEP = 0;
     static const int WORKING = 1;
+    static const int TERMINATE = -1;
 
     private:
     std::queue<Job> _jobqueue;
@@ -129,8 +130,7 @@ class JobQueue
 
     ~JobQueue()
     {
-        setState(-1);
-        wakeUpAll();
+        wait_terminate();
     }
 
     int getThredState(size_t thread)
@@ -198,13 +198,24 @@ class JobQueue
         return true;
     }
 
+    /* wait for all threads to terminate */
+    void wait_terminate()
+    {
+        setState(TERMINATE);
+        wakeUpAll();
+
+        for (size_t i = 0; i < _cpus; i++) {
+            pthread_join(_threads[i], NULL);
+        }
+    }
+
     void *run()
     {
         size_t myNumber = getNextWorkerNumber();
         sem_t *semaph = &(_sleepSem[myNumber]);
 
         // keep thread until workState is -1 (terminate)
-        while (_workState != -1) {
+        while (_workState != TERMINATE) {
 
             // check whether there is some work, do it
             JobQueue::Job job = getNextJob();
