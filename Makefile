@@ -172,12 +172,12 @@ $(BUILD_DIR)/release/bin/$(MINISAT) $(BUILD_DIR)/debug/bin/$(MINISAT) $(BUILD_DI
 $(BUILD_DIR)/debug/tests/%:
 	$(ECHO) Linking Binary: $@
 	$(VERB) mkdir -p $(dir $@)
-	$(VERB) $(CXX) $^ $(MINISAT_LDFLAGS) $(LDFLAGS) -o $@
+	$(VERB) $(CXX) $^ $(MINISAT_LDFLAGS) $(LDFLAGS) -o $@ -lpthread
 
 $(BUILD_DIR)/release/tests/%:
 	$(ECHO) Linking Binary: $@
 	$(VERB) mkdir -p $(dir $@)
-	$(VERB) $(CXX) $^ $(MINISAT_LDFLAGS) $(LDFLAGS) -o $@
+	$(VERB) $(CXX) $^ $(MINISAT_LDFLAGS) $(LDFLAGS) -o $@ -lpthread
 
 ## Static Library rule
 %/lib/$(MINISAT_SLIB):
