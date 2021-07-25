@@ -742,10 +742,11 @@ class Solver
     ClauseRingBuffer simplifyBuffer;
 
     // HordeSat Portfolio support
-    bool share_parallel;       // do send clauses for other parallel solvers
-    bool receiveClauses;       // do send clauses for other parallel solvers
-    int share_clause_max_size; // max clause size for sharing
-    uint64_t receivedCls;      // count number of received clauses
+    bool share_parallel;                       // do send clauses for other parallel solvers
+    int share_max_cls_size, share_max_cls_lbd; // allow to dynamicall control which clauses to consider for sharing
+    bool receiveClauses;                       // do send clauses for other parallel solvers
+    int share_clause_max_size;                 // max clause size for sharing
+    uint64_t receivedCls;                      // count number of received clauses
     void (*learnedClsCallback)(const std::vector<int> &, int glueValue, void *issuer); // callback for clause learning
     void (*consumeSharedCls)(void *issuer);     // get shared clauses from parallel solving and use them
     void *issuer;                               // used as the callback parameter
@@ -1191,7 +1192,7 @@ template <class V> inline void Solver::shareViaCallback(const V &v, int lbd)
     }
 
     /* share only limited clauses in parallel solving! */
-    if (share_parallel && learnedClsCallback != 0 && (v.size() < 3 || lbd <= core_lbd_cut)) {
+    if (share_parallel && learnedClsCallback != 0 && (v.size() < share_max_cls_size || lbd <= share_max_cls_lbd)) {
         learnCallbackBuffer.resize(v.size());
         if (!filled_buffer) {
             for (int i = 0; i < v.size(); i++) {

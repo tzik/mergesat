@@ -204,6 +204,12 @@ opt_max_activity_bump_size(_cat, "max-act-bump", "Do not bump more than X vars p
 static IntOption
 opt_max_lbd_calc_size(_cat, "max-lbd-calc", "Do not calculate LBD for clauses larger than X", 100, IntRange(0, INT32_MAX));
 
+static IntOption
+opt_share_max_cls_size("PARALLEL", "share-max-cls-size", "Do not share clauses greater than X", 3, IntRange(1, INT32_MAX));
+static IntOption
+opt_share_max_cls_lbd("PARALLEL", "share-max-cls-lbd", "Do not share clauses with LBD greater than X", 3, IntRange(1, INT32_MAX));
+
+
 //=================================================================================================
 // Constructor/Destructor:
 
@@ -392,6 +398,8 @@ Solver::Solver()
   , simplifyBuffer(opt_dup_buffer_size)
 
   , share_parallel(true)
+  , share_max_cls_size(opt_share_max_cls_size)
+  , share_max_cls_lbd(opt_share_max_cls_lbd)
   , receiveClauses(true)
   , share_clause_max_size(64)
   , receivedCls(0)
