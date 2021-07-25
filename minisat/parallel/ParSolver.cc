@@ -318,6 +318,17 @@ int ParSolver::max_simp_cls()
     return solvers[0]->max_simp_cls();
 }
 
+void ParSolver::learnedClsCallback(const std::vector<int> &c, int glueValue, size_t threadnr)
+{
+    /* std::cout << "c thread [" << threadnr << "] share clause with size " << c.size() << " and lbd " << glueValue << std::endl; */
+    return;
+}
+
+void ParSolver::solver_learnedClsCallback(const std::vector<int> &c, int glueValue, void *issuer)
+{
+    SolverData *s = (SolverData *)issuer;
+    (s->_parent)->learnedClsCallback(c, glueValue, s->_threadnr);
+}
 
 void ParSolver::init_solvers()
 {
@@ -358,6 +369,11 @@ void ParSolver::init_solvers()
         for (int i = 0; i < solvers.size(); ++i) {
             solverData[i] = { this, i };
         }
+    }
+
+    for (int i = 0; i < solvers.size(); ++i) {
+        /* setup the handler to share learned clauses */
+        solvers[i]->learnedClsCallback = ParSolver::solver_learnedClsCallback;
     }
 
     assert(solvers[0] != nullptr && "there has to be one working solver");

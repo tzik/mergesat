@@ -130,6 +130,12 @@ class ParSolver : protected SimpSolver
     static bool portfolio_sync_and_share(void *issuer, lbool *status); // this is called from a thread when a solver needs to sync (each restart)
     bool sync_thread_portfolio(size_t threadnr, bool enforce_waiting=false); // synchronize threads at this point. return true, if search should be stopped
 
+    // Learned clause sharing
+    /// callback to be registered in solver
+    static void solver_learnedClsCallback(const std::vector<int> &c, int glueValue, void *issuer);
+    /// function that executes the callback in the scope of the parallel sharing entity
+    void learnedClsCallback(const std::vector<int> &c, int glueValue, size_t threadnr);
+
     // Extra stats
     double simplification_seconds; // seconds of sequential core spend during simplification
 };
