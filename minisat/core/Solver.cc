@@ -402,6 +402,7 @@ Solver::Solver()
   , share_max_cls_lbd(opt_share_max_cls_lbd)
   , receiveClauses(true)
   , share_clause_max_size(64)
+  , shared_unit_clauses(0)
   , receivedCls(0)
   , learnedClsCallback(NULL)
   , consumeSharedCls(NULL)
@@ -2613,6 +2614,22 @@ void Solver::rand_based_rephase()
     }
 }
 
+/// Share all unit clauses on trail after propagation
+void Solver::shareUnitClauses()
+{
+    if(decisionLevel() != 0) return;
+
+    add_tmp.clear();
+    add_tmp.push(lit_Undef);
+    while(shared_unit_clauses < trail.size()) {
+        assert(level(var(trail[shared_unit_clauses])) == 0 && "shared unit clauses are level 0");
+        add_tmp[0] = trail[shared_unit_clauses];
+        shareViaCallback(add_tmp, 1);
+        ++ shared_unit_clauses;
+    }
+    add_tmp.clear();
+}
+
 /*_________________________________________________________________________________________________
 |
 |  search : (nof_conflicts : int) (params : const SearchParams&)  ->  [lbool]
@@ -2833,6 +2850,9 @@ lbool Solver::search(int &nof_conflicts)
             }
 
         } else {
+
+            shareUnitClauses();
+
             // NO CONFLICT
             if (solve_starts + starts > state_change_time) {
 

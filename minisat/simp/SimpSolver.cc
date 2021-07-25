@@ -159,8 +159,6 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
     do_simp &= use_simplification;
     double simp_time = cpuTime();
 
-    const int pre_simplification_units = trail.size();
-
     if (do_simp) {
         // Assumptions must be temporarily frozen to run variable elimination:
         for (int i = 0; i < assumptions.size(); i++) {
@@ -190,14 +188,7 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
 
     /* share units during initial call, only really useful in case preprocessing is used */
     if (solves == 1) {
-        assert(decisionLevel() == 0);
-        add_tmp.clear();
-        add_tmp.push(lit_Undef);
-        for (int i = pre_simplification_units; i < trail.size(); ++i) {
-            add_tmp[0] = trail[i];
-            shareViaCallback(add_tmp, 1);
-        }
-        add_tmp.clear();
+        Solver::shareUnitClauses();
     }
 
     if (result == l_True)

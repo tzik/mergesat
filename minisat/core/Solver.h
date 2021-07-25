@@ -746,11 +746,13 @@ class Solver
     int share_max_cls_size, share_max_cls_lbd; // allow to dynamicall control which clauses to consider for sharing
     bool receiveClauses;                       // do send clauses for other parallel solvers
     int share_clause_max_size;                 // max clause size for sharing
+    int shared_unit_clauses;                   // count how many literals from level 0 of the trail we already shared
     uint64_t receivedCls;                      // count number of received clauses
     void (*learnedClsCallback)(const std::vector<int> &, int glueValue, void *issuer); // callback for clause learning
     void (*consumeSharedCls)(void *issuer);     // get shared clauses from parallel solving and use them
     void *issuer;                               // used as the callback parameter
     int lastDecision;                           // the last decision made by the solver
+    void shareUnitClauses();                    // make sure all unit clauses from the trail have been shared
     void addLearnedClause(const vec<Lit> &cls); // add a learned clause by hand
     void diversify(int rank, int size);         // set parameters based on position in set, and set size
     bool importClause(const Clause &c);         // import 'input' (or formula) clause from another solver
