@@ -107,6 +107,7 @@ const Lit lit_Error = { -1 }; // }
 
 
 inline int toFormal(Lit p) { return sign(p) ? -var(p) - 1 : var(p) + 1; }
+inline Lit fromFormal(int p) { return mkLit(abs(p) - 1, p<0); }
 
 
 inline std::ostream &operator<<(std::ostream &out, const Lit &val)
@@ -212,6 +213,17 @@ class Clause
         //
         header.simplified = 0;
         header.onQueue = 0;
+    }
+
+    // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
+    explicit Clause(size_t literals, bool learnt)
+    {
+        init_header(literals, learnt, learnt);
+
+        if (header.has_extra && header.learnt) {
+                data[header.size].act = 0;
+                data[header.size + 1].touched = 0;
+        }
     }
 
     // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
@@ -438,6 +450,16 @@ class ClauseAllocator : public RegionAllocator<uint32_t>
     {
         to.extra_clause_field = extra_clause_field;
         RegionAllocator<uint32_t>::moveTo(to);
+    }
+
+    CRef alloc_placeholder(const size_t lits, bool learnt = false)
+    {
+        int extras = learnt ? 2 : (int)extra_clause_field;
+
+        CRef cid = RegionAllocator<uint32_t>::alloc(clauseWord32Size(lits, extras));
+        new (lea(cid)) Clause(lits, learnt);
+
+        return cid;
     }
 
     template <class Lits> CRef alloc(const Lits &ps, bool learnt = false)
