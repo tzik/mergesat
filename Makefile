@@ -58,10 +58,15 @@ SOMAJOR=2
 SOMINOR=1
 SORELEASE?=.0#   Declare empty to leave out from library file name.
 
+# Support more customization
+CXX_EXTRA_FLAGS ?=
+LD_EXTRA_FLAGS ?=
+STATIC_FLAGS ?= -static
+
 MINISAT_CXXFLAGS = -I. -Iminisat -D __STDC_LIMIT_MACROS -D __STDC_FORMAT_MACROS -Wall -Wextra
 MINISAT_CXXFLAGS += -Wno-unused-label -Wno-sequence-point -Wno-write-strings -Wno-unused-parameter
-MINISAT_CXXFLAGS += -Wno-class-memaccess -Wno-unknown-warning-option -std=c++11
-MINISAT_LDFLAGS  = -Wall -lz
+MINISAT_CXXFLAGS += -Wno-class-memaccess -Wno-unknown-warning-option -std=c++11 $(CXX_EXTRA_FLAGS)
+MINISAT_LDFLAGS  = -Wall -lz $(LD_EXTRA_FLAGS)
 
 # Allow to control which kind of the solver is build, by default 'simp' (sequential)
 # Supported:  'simp, 'parallel'
@@ -76,7 +81,7 @@ ifeq (Darwin,$(findstring Darwin,$(shell uname)))
 	RELEASE_LDFLAGS +=
 else
 	SHARED_LDFLAGS += -shared -Wl,-soname,$(MINISAT_DLIB).$(SOMAJOR)
-	RELEASE_LDFLAGS += -static
+	RELEASE_LDFLAGS += $(STATIC_FLAGS)
 endif
 
 ECHO=@echo
