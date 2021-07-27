@@ -197,14 +197,14 @@ class Clause
 
     friend class ClauseAllocator;
 
-    // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
-    template <class V> Clause(const V &ps, bool use_extra, bool learnt)
+    /// Initialize header based on given data
+    void init_header(int size, bool &use_extra, bool &learnt)
     {
         header.mark = 0;
         header.learnt = learnt;
         header.has_extra = learnt | use_extra;
         header.reloced = 0;
-        header.size = ps.size();
+        header.size = size;
         header.lbd = 0;
         header.S = 0;
         header.removable = 1;
@@ -212,6 +212,12 @@ class Clause
         //
         header.simplified = 0;
         header.onQueue = 0;
+    }
+
+    // NOTE: This constructor cannot be used directly (doesn't allocate enough memory).
+    template <class V> Clause(const V &ps, bool use_extra, bool learnt)
+    {
+        init_header(ps.size(), use_extra, learnt);
 
         for (int i = 0; i < ps.size(); i++) data[i].lit = ps[i];
 
