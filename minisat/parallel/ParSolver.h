@@ -23,6 +23,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "mtl/Queue.h"
 #include "simp/SimpSolver.h"
 
+#include "parallel/Sharing.h"
+
 #include <atomic>
 
 namespace MERGESAT_NSPACE
@@ -52,6 +54,7 @@ class ParSolver : protected SimpSolver
         uint32_t _winning = 0;                 // indicate number of times this thread won
         uint32_t _entered_barrier = 0;         // count how often we entered the sync barrier
         uint32_t _blocked_by_barrier = 0;      // count how often we had to wait in the sync barrier
+        ClausePool pool;                       // store for learned clauses that are shared by this thread
 
         SolverData(ParSolver *parent, int threadnr) : _parent(parent), _threadnr(threadnr) {}
         SolverData() {}
@@ -140,6 +143,8 @@ class ParSolver : protected SimpSolver
     static void solver_learnedClsCallback(const std::vector<int> &c, int glueValue, void *issuer);
     /// function that executes the callback in the scope of the parallel sharing entity
     void learnedClsCallback(const std::vector<int> &c, int glueValue, size_t threadnr);
+    /// check whether a thread should actually keep a clause for sharing
+    bool sharingSendFilterAccept(const std::vector<int> &c, int glueValue, size_t threadnr);
 
     // Extra stats
     double simplification_seconds; // seconds of sequential core spend during simplification

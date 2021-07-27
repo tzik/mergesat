@@ -318,9 +318,17 @@ int ParSolver::max_simp_cls()
     return solvers[0]->max_simp_cls();
 }
 
+bool ParSolver::sharingSendFilterAccept(const std::vector<int> &c, int glueValue, size_t threadnr)
+{
+    /* TODO: here, filtering functions for keeping clauses can be implemented */
+    return true;
+}
+
 void ParSolver::learnedClsCallback(const std::vector<int> &c, int glueValue, size_t threadnr)
 {
-    /* std::cout << "c thread [" << threadnr << "] share clause with size " << c.size() << " and lbd " << glueValue << std::endl; */
+    if (sharingSendFilterAccept(c, glueValue, threadnr)) {
+        solverData[threadnr]->pool.add_shared_clause(c, glueValue);
+    }
     return;
 }
 
@@ -574,6 +582,9 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
     /* block on the barrier */
     if (verbosity > 1) std::cout << "c sync_thread_portfolio barrier wait 3 by thread " << threadnr << std::endl;
     solvingBarrier->wait();
+
+    /* free the space used in the pool of this thread again for the next iteration */
+    solverData[threadnr]->pool.reset();
 
     assert(sync_diff > 0 && "do not decrease sync diff value");
     solverData[threadnr]->_next_sync_counter_limit += sync_diff;
