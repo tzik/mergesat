@@ -1393,7 +1393,7 @@ void Solver::analyze(CRef confl, vec<Lit> &out_learnt, int &out_btlevel, int &ou
     int index = trail.size() - 1;
     int nDecisionLevel = level(var(ca[confl][0]));
     assert(nDecisionLevel == level(var(ca[confl][0])));
-
+    add_tmp.clear();
     do {
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause &c = ca[confl];
