@@ -2630,6 +2630,12 @@ void Solver::shareUnitClauses()
     add_tmp.clear();
 }
 
+/// Store minimum of assumptions and current level, to forward assumptions again
+void Solver::memorize_used_assumptions()
+{
+    last_used_assumptions = assumptions.size() > decisionLevel() ? decisionLevel() : assumptions.size();
+}
+
 /*_________________________________________________________________________________________________
 |
 |  search : (nof_conflicts : int) (params : const SearchParams&)  ->  [lbool]
@@ -2867,6 +2873,7 @@ lbool Solver::search(int &nof_conflicts)
 
                     if (res) {
                         solved_by_ls = true;
+                        memorize_used_assumptions();
                         return l_True;
                     }
                 }
@@ -2892,6 +2899,7 @@ lbool Solver::search(int &nof_conflicts)
                 restartLevel = (assumptions.size() && restartLevel <= assumptions.size()) ? assumptions.size() : restartLevel;
                 TRACE(std::cout << "c jump to level " << restartLevel << " for restart" << std::endl);
                 cancelUntil(restartLevel);
+                memorize_used_assumptions();
                 return l_Undef;
             }
 
@@ -2926,6 +2934,7 @@ lbool Solver::search(int &nof_conflicts)
                     newDecisionLevel();
                 } else if (value(p) == l_False) {
                     analyzeFinal(~p, conflict);
+                    memorize_used_assumptions();
                     return l_False;
                 } else {
                     next = p;
@@ -2938,9 +2947,11 @@ lbool Solver::search(int &nof_conflicts)
                 decisions++;
                 next = pickBranchLit();
 
-                if (next == lit_Undef)
+                if (next == lit_Undef) {
                     // Model found:
+                    memorize_used_assumptions();
                     return l_True;
+                }
 
                 lastDecision = var(next);
             }
@@ -2955,8 +2966,8 @@ lbool Solver::search(int &nof_conflicts)
         }
     }
 
-    // store minimum of assumptions and current level, to forward assumptions again
-    last_used_assumptions = assumptions.size() > decisionLevel() ? decisionLevel() : assumptions.size();
+    memorize_used_assumptions();
+    return l_Undef;
 }
 
 void Solver::addLearnedClause(const vec<Lit> &cls)
