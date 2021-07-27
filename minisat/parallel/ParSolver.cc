@@ -138,7 +138,7 @@ void ParSolver::printStats()
     printf("c theor. Max CPU time:           : %g s\n", theoretical_max_wall);
 
     double total_idle_time = 0;
-    for (int i = 0; i < solverData.size(); ++i) total_idle_time += solverData[i]._idle_s;
+    for (int i = 0; i < solverData.size(); ++i) total_idle_time += solverData[i]->_idle_s;
     printf("c idle wall search time (sum):   : %g s\n", total_idle_time);
 
     uint64_t total_conflicts = 0, total_decisions = 0, total_restarts = 0;
@@ -150,12 +150,12 @@ void ParSolver::printStats()
     printf("c SUM stats restarts:            : %ld\n", total_restarts);
     printf("c winning threads:");
     for (int i = 0 ; i < solverData.size(); ++ i) {
-        if (solverData[i]._winning > 0 ) printf(" %d:%d", i, solverData[i]._winning);
+        if (solverData[i]->_winning > 0 ) printf(" %d:%d", i, solverData[i]->_winning);
     }
     printf("\n");
     printf("c barrier data:");
     for (int i = 0 ; i < solverData.size(); ++ i) {
-        printf(" %d:%u/%u", i, solverData[i]._entered_barrier, solverData[i]._blocked_by_barrier);
+        printf(" %d:%u/%u", i, solverData[i]->_entered_barrier, solverData[i]->_blocked_by_barrier);
     }
     printf("\n");
 }
@@ -186,7 +186,7 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
         use_simplification = false;
         ret = lbool(solvers[0]->eliminate(true));
         simplification_seconds = wallClockTime() - simplification_seconds;
-        solverData[0]._next_sync_counter_limit = solvers[0]->counter_access.sum();
+        solverData[0]->_next_sync_counter_limit = solvers[0]->counter_access.sum();
         if (ret == l_False) {
             if (verbosity > 1) std::cout << "c simplification solved formula as unsat" << std::endl;
             assert(conflict.size() == 0);
@@ -217,16 +217,16 @@ lbool ParSolver::solveLimited(const vec<Lit> &assumps, bool do_simp, bool turn_o
             }
 
             // initialize communication for solver
-            solvers[t]->initialize_parallel_solver(&solverData[t], ParSolver::portfolio_sync_and_share);
+            solvers[t]->initialize_parallel_solver(solverData[t], ParSolver::portfolio_sync_and_share);
 
             // assert(t < solverData.size() && "enough solver data needs to be available");
             JobQueue::Job job;
             job.function = &(ParSolver::thread_entrypoint); // function that controls how a solver runs
-            job.argument = (void *)&(solverData[t]);
+            job.argument = (void *)solverData[t];
             jobqueue->addJob(job); // TODO: instead of queue, use a slot based data structure, to make use of core pinning
         }
         // initialize communication for primary solver
-        solvers[0]->initialize_parallel_solver(&solverData[0], ParSolver::portfolio_sync_and_share);
+        solvers[0]->initialize_parallel_solver(solverData[0], ParSolver::portfolio_sync_and_share);
 
         // parallel execution will start
         jobqueue->setState(JobQueue::WORKING);
@@ -258,10 +258,10 @@ lbool ParSolver::collect_solvers_results()
     size_t smallest_conflict = ~0UL;
     int smallest_conflict_idx = -1, sat_solver = -1;
     for (int t = 0; t < cores; ++t) { // all except master now
-        lbool r = solverData[t]._status;
+        lbool r = solverData[t]->_status;
         assert((status == l_Undef || r == l_Undef || status == r) && "solvers have to have same result");
-        assert(solverData[t]._blocked_by_barrier == solverData[0]._blocked_by_barrier && "barrier blocks have to match");
-        assert(solverData[t]._entered_barrier == solverData[0]._entered_barrier && "entered barriers have to match");
+        assert(solverData[t]->_blocked_by_barrier == solverData[0]->_blocked_by_barrier && "barrier blocks have to match");
+        assert(solverData[t]->_entered_barrier == solverData[0]->_entered_barrier && "entered barriers have to match");
 
         /* pick 'winning solver' */
         if (r != l_Undef) {
@@ -365,9 +365,10 @@ void ParSolver::init_solvers()
 
         solvingBarrier = new Barrier(0); // setup a dummy barrier for now
 
-        solverData.growTo(cores);
+        solverData.growTo(cores, 0);
         for (int i = 0; i < solvers.size(); ++i) {
-            solverData[i] = { this, i };
+            if (!solverData[i])
+                solverData[i] = new SolverData(this, i);
         }
     }
 
@@ -405,15 +406,15 @@ void ParSolver::tear_down_solvers()
 void ParSolver::solver_start_measure_idling(size_t threadnr)
 {
     assert(threadnr < solverData.size() && "only existing solvers can idle");
-    solverData[threadnr]._idle_s = wallClockTime() - solverData[threadnr]._idle_s;
+    solverData[threadnr]->_idle_s = wallClockTime() - solverData[threadnr]->_idle_s;
 }
 
 void ParSolver::solver_stop_measure_idling(size_t threadnr)
 {
     assert(threadnr < solverData.size() && "only existing solvers can idle");
-    solverData[threadnr]._idle_s = wallClockTime() - solverData[threadnr]._idle_s;
+    solverData[threadnr]->_idle_s = wallClockTime() - solverData[threadnr]->_idle_s;
     ;
-    assert(solverData[threadnr]._idle_s >= 0 && "idling cannot become negative");
+    assert(solverData[threadnr]->_idle_s >= 0 && "idling cannot become negative");
 }
 
 void ParSolver::thread_run_solve(size_t threadnr)
@@ -428,12 +429,12 @@ void ParSolver::thread_run_solve(size_t threadnr)
 
     // stop early, in case solver is in a bad state initially already
     if (!solvers[threadnr]->okay()) {
-        solverData[threadnr]._status = l_False;
+        solverData[threadnr]->_status = l_False;
         return;
     }
-    solverData[threadnr]._status = l_Undef;
-    solverData[threadnr]._status = solvers[threadnr]->solveLimited(assumptions);
-    if (verbosity > 1) std::cout << "c thread " << threadnr << " finished solving with " << solverData[threadnr]._status << " and accesses:" << solvers[threadnr]->counter_access.sum() << std::endl;
+    solverData[threadnr]->_status = l_Undef;
+    solverData[threadnr]->_status = solvers[threadnr]->solveLimited(assumptions);
+    if (verbosity > 1) std::cout << "c thread " << threadnr << " finished solving with " << solverData[threadnr]->_status << " and accesses:" << solvers[threadnr]->counter_access.sum() << std::endl;
     /* wait until all solvers enter here */
     solver_start_measure_idling(threadnr);
     /* final sync, enforce it (e.g. do not respect limits) */
@@ -508,12 +509,12 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
 {
     /* TODO: make use of the solvingBarrier here to make solving deterministic */
     assert(solvingBarrier && "in case of parallel solving, there needs to be a barrier");
-    assert( (!caller_has_solution || solved_current_call || solverData[threadnr]._status != l_Undef)
+    assert( (!caller_has_solution || solved_current_call || solverData[threadnr]->_status != l_Undef)
       && "we have to know the solution with this flag set, either ourselves, or another solver in an earlier sync");
 
     /* ignore this call, in case we did not reach the solver internal step limit */
     if (!caller_has_solution) {
-        if (solverData[threadnr]._next_sync_counter_limit >= solvers[threadnr]->counter_access.sum()) return false;
+        if (solverData[threadnr]->_next_sync_counter_limit >= solvers[threadnr]->counter_access.sum()) return false;
     }
 
     /* keep evaluation and early aborts below limitation check, to maintain deterministic behavior */
@@ -521,7 +522,7 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
     /* do not block, in case some solver already found the solution */
     if (solved_current_call) return true;
 
-    solverData[threadnr]._entered_barrier ++;
+    solverData[threadnr]->_entered_barrier ++;
 
     /* use this variable to determine how to treat difficiencies in synchronizing */
     int64_t sync_diff = 10000;               // as a start, allow 10k more clause accesses
@@ -538,7 +539,7 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
     /* check for new status only after the barrier! */
     lbool status = l_Undef;
     for (int t = 0; t < cores; ++t) { // all except master now
-        lbool r = solverData[t]._status;
+        lbool r = solverData[t]->_status;
         assert((status == l_Undef || r == l_Undef || status == r) && "solvers have to have same result");
 
         /* pick 'winning solver' */
@@ -551,8 +552,8 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
         }
     }
     assert(sync_diff > 0 && "do not decrease sync diff value");
-    solverData[threadnr]._next_sync_counter_limit += sync_diff;
-    if (solverData[threadnr]._status != l_Undef) solverData[threadnr]._winning ++;
+    solverData[threadnr]->_next_sync_counter_limit += sync_diff;
+    if (solverData[threadnr]->_status != l_Undef) solverData[threadnr]->_winning ++;
     /* abort early, in case we already found a solution */
     if (status != l_Undef) {
         /* some solver solved the current call */
@@ -575,10 +576,10 @@ bool ParSolver::sync_thread_portfolio(size_t threadnr, bool caller_has_solution)
     solvingBarrier->wait();
 
     assert(sync_diff > 0 && "do not decrease sync diff value");
-    solverData[threadnr]._next_sync_counter_limit += sync_diff;
-    if (solverData[threadnr]._status != l_Undef) solverData[threadnr]._winning ++;
+    solverData[threadnr]->_next_sync_counter_limit += sync_diff;
+    if (solverData[threadnr]->_status != l_Undef) solverData[threadnr]->_winning ++;
 
     /* stop search in case we found a solution */
-    if (status == l_Undef) solverData[threadnr]._blocked_by_barrier ++;
+    if (status == l_Undef) solverData[threadnr]->_blocked_by_barrier ++;
     return status != l_Undef;
 }

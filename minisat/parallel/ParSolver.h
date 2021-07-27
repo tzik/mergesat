@@ -38,7 +38,12 @@ class ParSolver : protected SimpSolver
     bool par_reparsed_options; // Indicate whether the update parameter method has been used
 
     /* structure, that holds relevant data for parallel solving */
-    struct SolverData {
+    class SolverData {
+        // Don't allow copying (error prone):
+        SolverData &operator=(SolverData &other) = delete;
+        SolverData(const SolverData &other) = delete;
+        SolverData(SolverData &&other) = delete;
+        public:
         ParSolver *_parent = nullptr;          // pointer to the coordinating ParSolver object
         int _threadnr = 0;                     // number of the solver among all solvers
         lbool _status = l_Undef;               // status of the associated SAT solver
@@ -102,7 +107,7 @@ class ParSolver : protected SimpSolver
     int cores; /// number of cores available to this parallel solver
     bool initialized;
     vec<SimpSolver *> solvers;
-    vec<SolverData> solverData;
+    vec<SolverData *> solverData;
     vec<Lit> assumptions;
 
     bool primary_modified; // indicate whether state of primary solver has been changed (new variables or clauses)
